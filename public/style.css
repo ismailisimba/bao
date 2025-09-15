@@ -1,0 +1,79 @@
+body {
+    font-family: sans-serif;
+    margin: 0;
+    overflow: hidden;
+    background-color: #282c34;
+    color: #eee;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+#login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 300px;
+}
+
+input, button {
+    padding: 10px;
+    font-size: 16px;
+    border-radius: 5px;
+    border: none;
+}
+
+button {
+    cursor: pointer;
+    background-color: #61afef;
+    color: white;
+}
+button:hover {
+    background-color: #528fcc;
+}
+
+#open-games-list {
+    list-style: none;
+    padding: 0;
+    width: 300px;
+    background: #3a3f4b;
+    border-radius: 5px;
+}
+
+#open-games-list li {
+    padding: 10px;
+    cursor: pointer;
+    border-bottom: 1px solid #282c34;
+}
+#open-games-list li:hover {
+    background-color: #4a505f;
+}
+
+.error-message {
+    color: #e06c75;
+}
+
+
+/* Game Canvas and Overlay styles from before */
+#game-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    outline: none;
+    display: block;
+}
+
+#ui-overlay {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    color: #eee;
+    text-shadow: 1px 1px 2px black;
+}

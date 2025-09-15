@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bao - The Game</title>
+    <link rel="stylesheet" href="style.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
+        }
+    }
+    </script>
+</head>
+<body>
+
+    <!-- Login Screen -->
+    <div id="login-container" class="container">
+        <h2>Login to Play Bao</h2>
+        <form id="login-form">
+            <input type="email" id="email" placeholder="Email" required value="user1@example.com">
+            <input type="password" id="password" placeholder="Password" required value="password123">
+            <button type="submit">Login</button>
+            <p id="login-error" class="error-message"></p>
+        </form>
+    </div>
+
+    <!-- Game Lobby Screen -->
+    <div id="lobby-container" class="container" style="display: none;">
+        <h2>Game Lobby</h2>
+        <p>Welcome, <span id="player-name"></span>!</p>
+        <button id="create-game-btn">Create New Game</button>
+        <h3>Open Games (click to join)</h3>
+        <ul id="open-games-list">
+            <!-- Games will be listed here -->
+        </ul>
+    </div>
+    
+    <!-- Game Screen -->
+    <div id="game-container" style="display: none;">
+        <canvas id="game-canvas"></canvas>
+        <div id="ui-overlay">
+            <h1 id="game-title">Bao</h1>
+            <p id="ui-message">Waiting for game to start...</p>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>
