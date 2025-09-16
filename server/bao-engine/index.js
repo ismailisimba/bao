@@ -10,7 +10,7 @@
 // 31 30 29 28 27 26 25 24  <-- Outer row (P2)
 // 16 17 18 19 20 21 22 23  <-- Inner row (P2)
 // ---------------------------
-//  8  9 10 11 12 13 14 15  <-- Inner row (P1)
+//  15  14 13 12 11 10 9 8  <-- Inner row (P1)
 //  0  1  2  3  4  5  6  7   <-- Outer row (P1)
 // Player 1's side (bottom rows)
 
@@ -26,7 +26,7 @@ const P2_INNER_ROW_END = 23;
  * @param {('kiswahili'|'kujifunza')} gameType - The version of Bao to play.
  * @returns {object} The initial game state.
  */
-function createGame(gameType = 'kiswahili') {
+function createGame(gameType = 'kujifunza') {
     const board = Array(32).fill(0);
     const state = {
         board,
@@ -77,7 +77,8 @@ function createGame(gameType = 'kiswahili') {
  * @returns {object} The new game state after the move.
  */
 function makeMove(gameState, move) {
-    console.log("INDEX makeMove called with:", gameState, move);
+
+    console.log("makeMove called with:", gameState, move);
     // Note: This is a simplified implementation of the core sowing/capturing loop.
     // Full validation (e.g., "must capture if possible") would be added here.
     
@@ -101,8 +102,6 @@ function makeMove(gameState, move) {
     let seedsToSow = newBoard[pitIndex];
     newBoard[pitIndex] = 0;
     let currentPit = pitIndex;
-
-    console.log(`Player ${player} is sowing ${seedsToSow} seeds from pit ${pitIndex}.`);
 
     // Loop while we have seeds to sow
     while (seedsToSow > 0) {
@@ -133,9 +132,9 @@ function makeMove(gameState, move) {
             }
         }
     }
-
-    console.log(`Board after move: ${newBoard}`);
     
+    console.log(`Player ${player} is sowing ${seedsToSow} seeds from pit ${pitIndex}.`);
+       console.log(`Board after move: ${newBoard}`);
     // --- End of Turn ---
     const nextPlayer = player === 1 ? 2 : 1;
     

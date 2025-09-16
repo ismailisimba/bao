@@ -41,7 +41,7 @@ const { baoProfileId } = req.user; // Get the user's profile ID from the token
 
 try {
     console.log("Creating game for profile ID:", bao);
-    const initialState = bao.createGame('kiswahili'); // Or get type from req.body
+    const initialState = bao.createGame('kujifunza'); // Or get type from req.body
     const result = await db.query(
         `INSERT INTO games (player1_id, game_state, status) 
          VALUES ($1, $2, 'waiting') 

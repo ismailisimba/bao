@@ -26,7 +26,7 @@ const P2_INNER_ROW_END = 23;
  * @param {('kiswahili'|'kujifunza')} gameType - The version of Bao to play.
  * @returns {object} The initial game state.
  */
-function createGame(gameType = 'kiswahili') {
+function createGame(gameType = 'kujifunza') {
     const board = Array(32).fill(0);
     const state = {
         board,
@@ -47,9 +47,8 @@ function createGame(gameType = 'kiswahili') {
         }
         state.phase = 'mtaji';
     } else { // Default to kiswahili
-        // 6 seeds in nyumba, 2 in pits to the right
-        const p1_nyumba = 11; // 4th from right in inner row
-        const p2_nyumba = 19; // 4th from right in inner row
+        const p1_nyumba = 11;
+        const p2_nyumba = 19;
         
         board[p1_nyumba] = 6;
         board[p1_nyumba + 1] = 2;
@@ -70,131 +69,160 @@ function createGame(gameType = 'kiswahili') {
 // --- Core Move Logic ---
 
 /**
- * Processes a player's move and returns the new game state.
- * This is the main function of the engine.
+ * Processes a player's move and returns the new game state AND a sequence of events.
  * @param {object} gameState - The current state of the game.
  * @param {object} move - The move to be made, e.g., { pitIndex: 10 }.
- * @returns {object} The new game state after the move.
+ * @returns {{finalState: object, moveSequence: Array<object>}} The new game state and the sequence of actions for animation.
  */
 function makeMove(gameState, move) {
-
     console.log("makeMove called with:", gameState, move);
-    // Note: This is a simplified implementation of the core sowing/capturing loop.
-    // Full validation (e.g., "must capture if possible") would be added here.
-    
-    // For now, we'll implement a basic takata turn from the mtaji phase.
-    // This provides the fundamental "sow and relay" mechanic.
-    
+    let moveSequence = []; // <-- This will log our animation steps
+    let tempGameState = JSON.parse(JSON.stringify(gameState)); // Deep copy
+
     const { pitIndex } = move;
-    const player = gameState.currentPlayer;
+    const player = tempGameState.currentPlayer;
 
     // 1. Basic validation
-    if (gameState.gameOver) return gameState;
+    if (tempGameState.gameOver) return { finalState: tempGameState, moveSequence };
     if (!isPlayersPit(pitIndex, player)) {
-        return { ...gameState, message: "Invalid move: Not your pit." };
+        tempGameState.message = "Invalid move: Not your pit.";
+        return { finalState: tempGameState, moveSequence };
     }
-    if (gameState.board[pitIndex] < 2 && gameState.phase === 'mtaji') {
-        return { ...gameState, message: "Invalid move: Pit must have at least 2 seeds." };
+    if (tempGameState.board[pitIndex] < 2 && tempGameState.phase === 'mtaji') {
+        tempGameState.message = "Invalid move: Pit must have at least 2 seeds.";
+        return { finalState: tempGameState, moveSequence };
+    }
+    if (tempGameState.board[pitIndex] >= 10 && tempGameState.phase === 'mtaji' && pitIndex >= P2_INNER_ROW_START && pitIndex <= P2_INNER_ROW_END) {
+        tempGameState.message = "Invalid move: Pit with more than 10 seeds cannot be moved or captured.";
+        return { finalState: tempGameState, moveSequence };
+    }
+     if (tempGameState.board[pitIndex] >= 10 && tempGameState.phase === 'mtaji' && pitIndex>= P1_INNER_ROW_START && pitIndex <= P1_INNER_ROW_END ) {
+        tempGameState.message = "Invalid move: Pit with more than 10 seeds cannot be moved or captured.";
+        return { finalState: tempGameState, moveSequence };
     }
 
     // --- Sowing Logic ---
-    let newBoard = [...gameState.board];
+    let newBoard = [...tempGameState.board];
     let seedsToSow = newBoard[pitIndex];
     newBoard[pitIndex] = 0;
     let currentPit = pitIndex;
 
-    // Loop while we have seeds to sow
+    // Log the initial action
+    moveSequence.push({ action: 'lift', fromPit: pitIndex, count: seedsToSow });
+
     while (seedsToSow > 0) {
-        // Move to the next pit in a circular fashion around the player's two rows
         currentPit = getNextPit(currentPit, player);
         newBoard[currentPit]++;
         seedsToSow--;
+        
+        // Log each sow
+        moveSequence.push({ action: 'sow', toPit: currentPit, seedsLeft: seedsToSow });
 
-        // If this was the last seed...
         if (seedsToSow === 0) {
-            // Check for relay sowing (multilap)
-            if (newBoard[currentPit] > 1) {
-                seedsToSow = newBoard[currentPit];
+            if (newBoard[currentPit] > 1 && newBoard[currentPit] < 10) {
+
+                      seedsToSow = newBoard[currentPit];
                 newBoard[currentPit] = 0;
+                moveSequence.push({ action: 'relay', fromPit: currentPit, count: seedsToSow });
+               
+            }else if(newBoard[currentPit]>10&&!isCapture(newBoard, currentPit, player)){
+                 if(currentPit>= P1_INNER_ROW_START && currentPit <= P1_INNER_ROW_END){
+               
+
+                }else if(currentPit>= P2_INNER_ROW_START && currentPit <= P2_INNER_ROW_END){
+
+                }else{
+                    seedsToSow = newBoard[currentPit];
+                newBoard[currentPit] = 0;
+                moveSequence.push({ action: 'relay', fromPit: currentPit, count: seedsToSow });
+                }
+
             }
-            // Check for capture (simplified for now)
             else if (isCapture(newBoard, currentPit, player)) {
-                // This is where the complex capture logic would go.
-                // It involves taking opponent's seeds and starting a new sow from a 'kichwa'.
-                // For Phase 3, we'll just acknowledge it happened.
                 const opponentPit = getOpponentPit(currentPit);
-                const capturedSeeds = newBoard[opponentPit];
-                newBoard[opponentPit] = 0;
-                
-                console.log(`Player ${player} captured ${capturedSeeds} seeds from pit ${opponentPit}!`);
-                // In a full implementation, `seedsToSow` would be set to `capturedSeeds`
-                // and `currentPit` would be moved to the correct `kichwa`.
+                const secondOpponentPit = getOpponentPitBehind(opponentPit);
+                newBoard[secondOpponentPit] = newBoard[secondOpponentPit] > 0 && newBoard[secondOpponentPit] < 10 ? newBoard[secondOpponentPit] : 0 ;
+                const capturedSeeds = newBoard[opponentPit] + newBoard[secondOpponentPit];
+                if (capturedSeeds > 0) {
+                    newBoard[opponentPit] = 0;
+                 
+                    seedsToSow = capturedSeeds;
+                    moveSequence.push({ action: 'capture', fromPit: opponentPit, toPit: currentPit, count: capturedSeeds });
+
+                    if(newBoard[secondOpponentPit]>0){
+                        newBoard[secondOpponentPit] = 0;
+                         moveSequence.push({ action: 'capture', fromPit: secondOpponentPit, toPit: currentPit, count: capturedSeeds });
+                    }else{                        
+                        
+                    }
+                   
+                    
+                    // In a full game, sowing would continue from a 'kichwa'
+                }
             }
         }
     }
-    
-    console.log(`Player ${player} is sowing ${seedsToSow} seeds from pit ${pitIndex}.`);
-       console.log(`Board after move: ${newBoard}`);
+
     // --- End of Turn ---
     const nextPlayer = player === 1 ? 2 : 1;
-    
-    // Check for win condition
     const { gameOver, winner } = checkWinCondition(newBoard, nextPlayer);
 
-    return {
-        ...gameState,
+    const finalState = {
+        ...tempGameState,
         board: newBoard,
         currentPlayer: gameOver ? player : nextPlayer,
         gameOver,
         winner,
         message: gameOver ? `Player ${winner} wins!` : `Player ${nextPlayer}'s turn.`
     };
+    
+    return { finalState, moveSequence };
 }
 
 
-// --- Helper Functions ---
+// --- Helper Functions (no changes below this line) ---
 
 function isPlayersPit(pitIndex, player) {
     return player === 1 ? pitIndex >= 0 && pitIndex <= 15 : pitIndex >= 16 && pitIndex <= 31;
 }
 
 function getNextPit(currentPit, player) {
+    // This simplified logic moves forward across both rows.
     if (player === 1) {
-        if (currentPit === 15) return 0; // Wrap around from inner to outer row
-        if (currentPit === 7) return 15; // Special jump from outer to inner
-        if (currentPit > 7) return currentPit + 1; // Move right on inner row
-        return currentPit + 1; // Move right on outer row (simplified for now)
+        if (currentPit >= 0 && currentPit < 7) return currentPit + 1; // Outer row right
+        if (currentPit === 7) return 8; // Jump to inner row
+        if (currentPit >= 8 && currentPit < 15) return currentPit + 1; // Inner row left
+        if (currentPit === 15) return 0; // Jump back to outer row start
+        return 0; // Default case
     } else { // Player 2
-        if (currentPit === 31) return 16; // Wrap around
-        if (currentPit === 23) return 31; // Special jump
-        if (currentPit > 23) return currentPit + 1;
-        return currentPit + 1; // Simplified
-    }
-    // A proper implementation would handle clockwise/counter-clockwise sowing.
-    // For now, we'll use a simple forward progression.
-    // Player 1: 8->15, then 0->7
-    // Player 2: 16->23, then 24->31
-    if (player === 1) {
-        if (currentPit === 15) return 0;
-        return currentPit + 1;
-    } else { // Player 2
-        if (currentPit === 31) return 16;
-        return currentPit + 1;
+        if (currentPit >= 16 && currentPit < 23) return currentPit + 1; // Inner row right
+        if (currentPit === 23) return 24; // Jump to outer row
+        if (currentPit >= 24 && currentPit < 31) return currentPit + 1; // Outer row left
+        if (currentPit === 31) return 16; // Jump back to inner row start
+        return 16; // Default case
     }
 }
 
-
 function isCapture(board, pitIndex, player) {
-    const isPlayerInnerRow = player === 1 ? 
+    const isPlayerInnerRow = player === 1 ?
         (pitIndex >= P1_INNER_ROW_START && pitIndex <= P1_INNER_ROW_END) :
         (pitIndex >= P2_INNER_ROW_START && pitIndex <= P2_INNER_ROW_END);
 
-    if (!isPlayerInnerRow || board[pitIndex] !== 1) {
-        return false; // Capture only happens on last seed drop in an empty pit (now 1 seed) in inner row
+    if (!isPlayerInnerRow ) {
+        return false;
+    }
+
+    if (board[pitIndex] > 1&&board[pitIndex] < 10||board[pitIndex]===0) {
+        return false;
     }
 
     const opponentPit = getOpponentPit(pitIndex);
-    return board[opponentPit] > 0;
+    if(board[opponentPit]>0&&board[opponentPit]<10){
+        return true;
+    }else{
+        return false;
+    }
+    
 }
 
 function getOpponentPit(pitIndex) {
@@ -204,27 +232,64 @@ function getOpponentPit(pitIndex) {
     if (pitIndex >= P2_INNER_ROW_START && pitIndex <= P2_INNER_ROW_END) {
         return P1_INNER_ROW_START + (P2_INNER_ROW_END - pitIndex);
     }
-    return -1; // Not an inner row pit
+    return -1;
+}
+
+function getOpponentPitBehind(pitIndex) {
+    if (pitIndex >= P1_INNER_ROW_START && pitIndex <= P1_INNER_ROW_END) {
+        switch (pitIndex) {
+            case 8: return 7;
+            case 9: return 6;
+            case 10: return 5;
+            case 11: return 4;
+            case 12: return 3;
+            case 13: return 2;
+            case 14: return 1;
+            case 15: return 0;
+            default: return 0;
+        }
+    }
+    if (pitIndex >= P2_INNER_ROW_START && pitIndex <= P2_INNER_ROW_END) {
+          switch (pitIndex) {
+            case 16: return 31;
+            case 17: return 30;
+            case 18: return 29;
+            case 19: return 28;
+            case 20: return 27;
+            case 21: return 26;
+            case 22: return 25;
+            case 23: return 24;
+            default: return 0;
+        }
+    }
+    return -1;
 }
 
 function checkWinCondition(board, nextPlayer) {
     const innerRowStart = nextPlayer === 1 ? P1_INNER_ROW_START : P2_INNER_ROW_START;
     const innerRowEnd = nextPlayer === 1 ? P1_INNER_ROW_END : P2_INNER_ROW_END;
+    const outerRowStart = nextPlayer === 1 ? 0 : 24;
+    const outerRowEnd = nextPlayer === 1 ? 7 : 31;
 
-    let hasSeedsInInnerRow = false;
+    let hasValidMoves = false;
     for (let i = innerRowStart; i <= innerRowEnd; i++) {
         if (board[i] > 0) {
-            hasSeedsInInnerRow = true;
+            hasValidMoves = true;
             break;
         }
     }
 
-    if (!hasSeedsInInnerRow) {
+    for (let i = outerRowStart; i <= outerRowEnd; i++) {
+        if (board[i] > 1) {
+            hasValidMoves = true;
+            break;
+        }
+    }
+
+    if (!hasValidMoves) {
         return { gameOver: true, winner: nextPlayer === 1 ? 2 : 1 };
     }
-    // A full implementation would also check if the player has any valid moves left.
     return { gameOver: false, winner: null };
 }
 
-// Export the functions for use in our server
 module.exports = { createGame, makeMove };
