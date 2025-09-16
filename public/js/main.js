@@ -1,12 +1,11 @@
-import GameScene from './GameScene.js'; // <-- Import the new class
-import { interactivePits } from './gameObjects.js';
+import GameScene from './GameScene.js';
 import { connectToServer, joinGame, sendMove } from './socket-client.js';
 
 // --- State Management ---
 let token = null;
 let currentGameId = null;
 let myProfileId = null;
-let gameSceneClass = null; // <-- This will hold our single scene instance
+let gameSceneClass = null; // This will hold our single scene instance
 
 // --- DOM Elements ---
 const loginContainer = document.getElementById('login-container');
@@ -51,7 +50,6 @@ async function showLobby() {
 }
 
 async function showGame() {
-    // --- Initialize the scene ONLY if it hasn't been already ---
     if (!gameSceneClass) {
         const canvas = document.getElementById('game-canvas');
         gameSceneClass = new GameScene(canvas, handlePitClick);
@@ -97,7 +95,7 @@ async function handleCreateGame() {
     });
     const game = await res.json();
     currentGameId = game.id;
-    joinGame(currentGameId); 
+    joinGame(currentGameId);
     await showGame();
 }
 
@@ -109,7 +107,7 @@ async function handleJoinGame(gameId) {
 
     if (!res.ok) {
         alert('Failed to join game. It may already be full.');
-        showLobby(); 
+        showLobby();
         return;
     }
 
@@ -123,11 +121,22 @@ function handlePitClick(pitIndex) {
     sendMove(currentGameId, { pitIndex });
 }
 
-function onGameStateUpdate(gameState) {
-    // --- Always call the render method on our single gameScene instance ---
-    console.log('Game state update received in main.js:', gameState,gameSceneClass);
+
+/**
+ * UPDATED: Handles incoming data from the server.
+ * If it has an animation sequence, it plays the animation.
+ * Otherwise, it just renders the state directly (e.g., on first join).
+ */
+function onGameStateUpdate(updateData) {
+    console.log('Game update received in main.js:', updateData);
     if (gameSceneClass) {
-        gameSceneClass.renderGameState(gameState, interactivePits, myProfileId);
+        // If it's an object with a move sequence, it's an animated move
+        if (updateData.moveSequence && updateData.finalState) {
+            gameSceneClass.playMoveAnimation(updateData.moveSequence, updateData.finalState, myProfileId);
+        } else {
+            // Otherwise, it's just a state refresh (e.g., on joining)
+            gameSceneClass.renderGameState(updateData, myProfileId);
+        }
     }
 }
 
@@ -146,7 +155,7 @@ async function checkForExistingSession() {
     connectToServer(token, onGameStateUpdate);
 
     try {
-        const res = await fetch('/api/games/active', {
+        const res = await fetch('/api/games/active', { // This endpoint is not in the provided files but we assume it works
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -154,7 +163,7 @@ async function checkForExistingSession() {
             const game = await res.json();
             currentGameId = game.id;
             joinGame(currentGameId);
-            await showGame(); 
+            await showGame();
         } else if (res.status === 404) {
             showLobby();
         } else {

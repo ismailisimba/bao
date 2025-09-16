@@ -76,4 +76,47 @@ button:hover {
     left: 20px;
     color: #eee;
     text-shadow: 1px 1px 2px black;
+    pointer-events: none; /* Allow clicks to pass through */
+}
+
+
+/* --- NEW STYLES --- */
+
+#game-info-container {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    background-color: rgba(40, 44, 52, 0.8);
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #4a505f;
+    width: 280px;
+    font-family: monospace;
+}
+
+#hover-info {
+    font-size: 16px;
+    margin-bottom: 10px;
+    min-height: 20px;
+}
+
+#pit-map {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 4px;
+    text-align: center;
+}
+
+#pit-map span {
+    background-color: #3a3f4b;
+    padding: 4px 0;
+    border-radius: 3px;
+    font-size: 12px;
+    transition: background-color 0.2s;
+}
+
+#pit-map .highlighted-pit {
+    background-color: #61afef;
+    color: #282c34;
+    font-weight: bold;
 }
