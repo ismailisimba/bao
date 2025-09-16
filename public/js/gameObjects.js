@@ -78,7 +78,7 @@ seedMeshTemplate = child;
 
 if (!seedMeshTemplate) throw new Error("No mesh found in seed.glb");
 
-seedMeshTemplate.scale.set(7, 7, 7);
+seedMeshTemplate.scale.set(2, 2, 2);
 seedMeshTemplate.castShadow = true;
 
 return { boardModel, seedMeshTemplate };

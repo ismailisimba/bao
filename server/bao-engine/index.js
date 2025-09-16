@@ -48,7 +48,7 @@ function createGame(gameType = 'kiswahili') {
         state.phase = 'mtaji';
     } else { // Default to kiswahili
         // 6 seeds in nyumba, 2 in pits to the right
-        const p1_nyumba = 12; // 4th from right in inner row
+        const p1_nyumba = 11; // 4th from right in inner row
         const p2_nyumba = 19; // 4th from right in inner row
         
         board[p1_nyumba] = 6;
@@ -77,6 +77,7 @@ function createGame(gameType = 'kiswahili') {
  * @returns {object} The new game state after the move.
  */
 function makeMove(gameState, move) {
+    console.log("INDEX makeMove called with:", gameState, move);
     // Note: This is a simplified implementation of the core sowing/capturing loop.
     // Full validation (e.g., "must capture if possible") would be added here.
     
@@ -100,6 +101,8 @@ function makeMove(gameState, move) {
     let seedsToSow = newBoard[pitIndex];
     newBoard[pitIndex] = 0;
     let currentPit = pitIndex;
+
+    console.log(`Player ${player} is sowing ${seedsToSow} seeds from pit ${pitIndex}.`);
 
     // Loop while we have seeds to sow
     while (seedsToSow > 0) {
@@ -130,6 +133,8 @@ function makeMove(gameState, move) {
             }
         }
     }
+
+    console.log(`Board after move: ${newBoard}`);
     
     // --- End of Turn ---
     const nextPlayer = player === 1 ? 2 : 1;

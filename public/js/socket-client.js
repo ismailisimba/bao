@@ -8,7 +8,6 @@ export function connectToServer(token, onGameStateUpdate) {
     
     // When the server sends a state update, call the provided callback
     socket.on('game_state_update', (gameState) => {
-        console.log('Received game state update:', gameState);
         onGameStateUpdate(gameState); // This will trigger the 3D render
     });
     

@@ -15,6 +15,7 @@ export default class GameScene {
     onPitClickCallback;
     seedsGroup;
     seedMeshTemplate;
+    seedDimensions = new THREE.Vector3();
     cameraOriented = false;
 
     // --- NEW: Dynamic geometry and grid properties ---
@@ -34,97 +35,115 @@ export default class GameScene {
         this.seedsGroup = new THREE.Group();
     }
 
-   /**
-     * Measures the board model and creates a virtual grid for pit positions
-     * and raycasting targets based on the specified layout rules.
-     * @param {THREE.Object3D} boardModel The loaded board model.
-     */
-    createPitGeometry(boardModel) {
-        // 1. Get board size from its bounding box
-        const boundingBox = new THREE.Box3().setFromObject(boardModel);
-        const boardSize = new THREE.Vector3();
-        boundingBox.getSize(boardSize);
-        boundingBox.getCenter(this.boardDimensions.center);
+  /**
+ * Measures the board model and creates a virtual grid for pit positions
+ * and raycasting targets based on the specified layout rules.
+ * @param {THREE.Object3D} boardModel The loaded board model.
+ */
+createPitGeometry(boardModel) {
+    // 1. Get board size from its bounding box
+    const boundingBox = new THREE.Box3().setFromObject(boardModel);
+    const boardSize = new THREE.Vector3();
+    boundingBox.getSize(boardSize);
+    boundingBox.getCenter(this.boardDimensions.center);
 
-        // 2. Determine longer and shorter side
-        console.log(`Board dimensions - Width: ${boardSize.x}, Height: ${boardSize.y} , Depth: ${boardSize.z}`);    
-        const isXLonger = boardSize.x >= boardSize.z;
-        const longerSide = isXLonger ? boardSize.x : boardSize.z;
-        const shorterSide = isXLonger ? boardSize.z : boardSize.x;
-
-        // Store dimensions for later use
-        this.boardDimensions.width = boardSize.x;
-        this.boardDimensions.height = boardSize.z;
-        
-        // 3. Calculate grid dimensions
-        const colWidth = longerSide / this.COLS;
-        
-        // Shorter side is divided in 4:1:4 ratio (total 9 parts)
-        const totalRatioParts = 9;
-        const outerRowHeight = (shorterSide / totalRatioParts) * 4;
-        const innerRowHeight = outerRowHeight; // Same size
-        const gapHeight = (shorterSide / totalRatioParts) * 1;
-
-        // Calculate Y positions for the center of each row, relative to the board's center
-        const y_p2_outer = (gapHeight / 2) + innerRowHeight + (outerRowHeight / 2); // Top-most row
-        const y_p2_inner = (gapHeight / 2) + (innerRowHeight / 2);
-        const y_p1_inner = -(gapHeight / 2) - (innerRowHeight / 2);
-        const y_p1_outer = -(gapHeight / 2) - innerRowHeight - (outerRowHeight / 2); // Bottom-most row
-        
-        const rowCenterYs = [y_p1_outer, y_p1_inner, y_p2_inner, y_p2_outer];
-        
-        const startX = -longerSide / 2 + colWidth / 2;
-
-        // 4. Generate and store the center position for each of the 32 pits
-        this.pitPositions = new Array(32);
-        for (let row = 0; row < this.ROWS; row++) {
-            for (let col = 0; col < this.COLS; col++) {
-                const pitX = startX + col * colWidth;
-                const pitY = rowCenterYs[row];
-
-                let pitIndex;
-                if (row === 0) pitIndex = col;        // P1 outer row: 0-7
-                else if (row === 1) pitIndex = 15 - col;   // P1 inner row: 15-8
-                else if (row === 2) pitIndex = 16 + col;   // P2 inner row: 16-23
-                else if (row === 3) pitIndex = 31 - col;   // P2 outer row: 31-24
-                
-                let position;
-                // Account for board orientation (whether it's wider or taller)
-                if (isXLonger) {
-                    position = new THREE.Vector3(pitX, pitY, this.boardDimensions.center.z);
-                } else {
-                    position = new THREE.Vector3(pitY, pitX, this.boardDimensions.center.z); // Swap x and y
-                }
-                
-                this.pitPositions[pitIndex] = position;
-            }
-        }
     
-        // 5. Create invisible meshes for raycasting
-        const pitGeometry = new THREE.CircleGeometry(colWidth / 2.5, 16); // Circles are slightly smaller than the cell
-        //const pitMaterial = new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide });
-           // --- MODIFICATION FOR DEBUGGING ---
-        // Instead of making the material invisible, we give it a color and make it transparent.
-        const pitMaterial = new THREE.MeshBasicMaterial({ 
-            color: 0xff0000,      // A bright red color for debugging
-            side: THREE.DoubleSide,
-            transparent: true,    // Enable transparency
-            opacity: 0.5          // Make it semi-transparent
-        });
+    // --- FIX 1: Determine dimensions based on the X-Z plane ---
+    const isXLonger = boardSize.x >= boardSize.z;
+    const longerSide = isXLonger ? boardSize.x : boardSize.z;
+    const shorterSide = isXLonger ? boardSize.z : boardSize.x;
+
+   
+
+    // Store dimensions for later use (using more descriptive names)
+    this.boardDimensions.width = longerSide;  // The dimension with 8 pits
+    this.boardDimensions.depth = shorterSide; // The dimension with 4 pits
+
+    // 3. Calculate grid dimensions
+    const colWidth = longerSide / this.COLS;
+    //const colWidth = 10;
 
 
-        const pitMeshesGroup = new THREE.Group();
-        this.pitPositions.forEach((pos, index) => {
-            const pitMesh = new THREE.Mesh(pitGeometry, pitMaterial);
-            pitMesh.position.copy(pos);
-            pitMesh.userData.pitIndex = index; // Store index for easy retrieval on click
-            pitMeshesGroup.add(pitMesh);
-            this.interactivePits.push(pitMesh); // Add to our array for the raycaster
-        });
+    // Shorter side is divided in 2:1:2 ratio (total 5 parts)
+    const totalRatioParts = 5;
+    const outerRowHeight = (shorterSide / totalRatioParts) * 1;
+    const innerRowHeight = outerRowHeight; // Same size
+   // const gapHeight = (shorterSide / totalRatioParts) * .0025; // The gap between inner rows
+   const gapHeight = 15;
+ 
 
-        this.scene.add(pitMeshesGroup);
-        console.log("Virtual pit geometry created with " + this.pitPositions.length + " positions.");
+    // Calculate positions along the shorter axis (which will be the Z-axis for the pits)
+    const z_p2_outer = (gapHeight / 2) + innerRowHeight + (outerRowHeight / 2); // Top-most row
+    const z_p2_inner = (gapHeight / 2) + (innerRowHeight / 2);
+    const z_p1_inner = -(gapHeight / 2) - (innerRowHeight / 2);
+    const z_p1_outer = -(gapHeight / 2) - innerRowHeight - (outerRowHeight / 2); // Bottom-most row
+
+    const rowCenterZs = [z_p1_outer, z_p1_inner, z_p2_inner, z_p2_outer];
+    
+    //const startX = -longerSide / 2 + colWidth / 2;
+
+    const startX = -5; // Center the grid around X=0
+
+       
+    // --- FIX 2: Calculate the Y coordinate for the TOP surface of the board ---
+    // We add a small epsilon (0.1) to prevent flickering (Z-fighting) with the board surface.
+    const topOfBoardY = this.boardDimensions.center.y + (boardSize.y / 2) + 0.1;
+
+    // 4. Generate and store the center position for each of the 32 pits
+    this.pitPositions = new Array(32);
+    for (let row = 0; row < this.ROWS; row++) {
+        for (let col = 0; col < this.COLS; col++) {
+            // These are positions on a 2D plane
+            const pitX_on_plane = startX + col * colWidth;
+            const pitZ_on_plane = rowCenterZs[row];
+
+            let pitIndex;
+            if (row === 0) pitIndex = col;        // P1 outer row: 0-7
+            else if (row === 1) pitIndex = 15 - col;   // P1 inner row: 15-8
+            else if (row === 2) pitIndex = 16 + col;   // P2 inner row: 16-23
+            else if (row === 3) pitIndex = 31 - col;   // P2 outer row: 31-24
+            
+            // --- FIX 3: Construct the 3D position vector correctly ---
+            // Place calculated coordinates into X and Z, and use our fixed Y for height.
+            let position;
+            if (isXLonger) {
+                // Board is wider than it is deep. X is the long side, Z is the short side.
+                position = new THREE.Vector3(pitX_on_plane, topOfBoardY, pitZ_on_plane);
+            } else {
+                // Board is deeper than it is wide. Z is the long side, X is the short side.
+                position = new THREE.Vector3(pitZ_on_plane, topOfBoardY, pitX_on_plane); // Swap X and Z
+            }
+            
+            this.pitPositions[pitIndex] = position;
+        }
     }
+
+    // 5. Create visible meshes for raycasting and debugging
+    const pitGeometry = new THREE.CircleGeometry(colWidth / 2.5, 16);
+    const pitMaterial = new THREE.MeshBasicMaterial({
+        color: 0xff0000,      // A bright red color for debugging
+        side: THREE.DoubleSide,
+        transparent: true,    // Enable transparency
+        opacity: 0         // Make it semi-transparent
+    });
+
+    const pitMeshesGroup = new THREE.Group();
+    this.pitPositions.forEach((pos, index) => {
+        const pitMesh = new THREE.Mesh(pitGeometry, pitMaterial);
+        pitMesh.position.copy(pos);
+
+        // --- FIX 4: Rotate the circle to make it lie flat on the X-Z plane ---
+        pitMesh.rotation.x = -Math.PI / 2; // Rotates -90 degrees around the X-axis
+
+        pitMesh.userData.pitIndex = index;
+        pitMeshesGroup.add(pitMesh);
+        this.interactivePits.push(pitMesh);
+    });
+
+    this.scene.add(pitMeshesGroup);
+    console.log("Virtual pit geometry created with " + this.pitPositions.length + " positions.");
+}
+
 
 
     async init() {
@@ -150,7 +169,7 @@ export default class GameScene {
         this.controls.dampingFactor = 0.05;
         this.controls.enablePan = false;
         this.controls.minDistance = 150;
-        this.controls.maxDistance = 600;
+        this.controls.maxDistance = 1000;
         this.controls.minPolarAngle = Math.PI / 4;
         this.controls.maxPolarAngle = Math.PI / 2.2;
 
@@ -178,7 +197,7 @@ export default class GameScene {
         directionalLight.shadow.camera.bottom = -250;
         this.scene.add(directionalLight);
 
-        const floorGeometry = new THREE.PlaneGeometry(5000, 2500);
+        const floorGeometry = new THREE.PlaneGeometry(5000, 1500);
         const floorTexture = textureLoader.load(GCS_ASSET_URL + 'table_texture.jpg');
         floorTexture.wrapS = THREE.RepeatWrapping;
         floorTexture.wrapT = THREE.RepeatWrapping;
@@ -193,6 +212,12 @@ export default class GameScene {
         // --- Game Objects ---
         const { boardModel, seedMeshTemplate } = await loadGameAssets();
         this.seedMeshTemplate = seedMeshTemplate;
+
+         // --- NEW: Measure the seed for realistic piling ---
+        new THREE.Box3().setFromObject(this.seedMeshTemplate).getSize(this.seedDimensions);
+        console.log(`Measured seed dimensions: Y (height) = ${this.seedDimensions.y.toFixed(2)}`);
+
+
         this.scene.add(boardModel);
         this.scene.add(this.seedsGroup);
 
@@ -210,11 +235,10 @@ export default class GameScene {
     // --- Class Methods ---
     
     // The 'pits' argument is no longer needed as we use this.pitPositions
-    renderGameState(gameState, myProfileId) {
+         renderGameState(gameState, myProfileId) {
         if (!this.scene || !this.seedMeshTemplate || this.pitPositions.length === 0) {
             console.warn("RenderGameState called before scene/assets are fully initialized.");
-            // Retry logic can be kept if necessary
-            setTimeout(() => this.renderGameState(gameState, myProfileId), 500);
+            setTimeout(() => this.renderGameState(gameState, myProfileId), 1500);
             return;
         }
 
@@ -224,42 +248,76 @@ export default class GameScene {
             this.cameraOriented = true;
         }
 
-        // Clear existing seeds efficiently
         while (this.seedsGroup.children.length > 0) {
             this.seedsGroup.remove(this.seedsGroup.children[0]);
         }
 
+        // Create reusable objects to avoid creating them in the loop
+        const scaleMatrix = new THREE.Matrix4();
+        const rotationMatrix = new THREE.Matrix4();
+        const translationMatrix = new THREE.Matrix4();
+        const finalMatrix = new THREE.Matrix4();
+        const randomEuler = new THREE.Euler();
+        
+        // --- FIX 1: Capture the original scale from the template ---
+        // This ensures the seeds are the correct size.
+        const originalScale = this.seedMeshTemplate.scale;
+        scaleMatrix.makeScale(originalScale.x, originalScale.y, originalScale.z);
+
         gameState.board.forEach((seedCount, pitIndex) => {
             if (seedCount > 0) {
-                // Get the pre-calculated world position for this pit
                 const pitWorldPosition = this.pitPositions[pitIndex];
                 
                 if (!pitWorldPosition) {
-                    console.warn(`No position found for pit index ${pitIndex}`);
+                    console.error(`CRITICAL: No position found for pit index ${pitIndex}. Cannot place seeds.`);
                     return;
                 }
                 
-                // Dynamically determine a radius for spreading seeds within the pit
-                const pitRadius = this.boardDimensions.width / this.COLS / 2.5; 
+                // --- FIX 2: Calculate a much tighter radius based on the seed's own size ---
+                // We use about 75% of a seed's width as the max spread.
+                // This makes the seeds cluster tightly as if in a small pile.
+                const tightRadius = this.seedDimensions.x * 1.5;
 
+                
                 for (let i = 0; i < seedCount; i++) {
-                    const seed = this.seedMeshTemplate.clone();
-
-                    // Spread seeds randomly within the pit's radius
+                    // 1. Calculate the FINAL POSITION
                     const angle = Math.random() * Math.PI * 2;
-                    const radius = Math.sqrt(Math.random()) * pitRadius; // sqrt for more even distribution
+                    const radius = Math.sqrt(Math.random()) * tightRadius;
                     
-                    const x = pitWorldPosition.x + Math.cos(angle) * radius;
-                    const y = pitWorldPosition.z + Math.sin(angle) * radius;
-                    // Place seeds slightly above the board's surface
-                    const z = this.boardDimensions.center.z + 1.5;
+                    const seedX = pitWorldPosition.x + Math.cos(angle) * radius;
+                    const seedZ = pitWorldPosition.z + Math.sin(angle) * radius;
+                    // --- FIX 3: Make piling denser ---
+                    // Using a smaller multiplier makes the pile more compact.
+                    const seedY = pitWorldPosition.y + (i * this.seedDimensions.y * .1) - (this.boardDimensions.depth * 0.14);
 
-                    seed.position.set(x, y, z);
-                    seed.rotation.set(
-                        Math.random() * Math.PI,
-                        Math.random() * Math.PI,
-                        Math.random() * Math.PI
+                    //console.log(`Placing seed ${i+1}/${seedCount} in pit ${pitIndex} at (${seedX.toFixed(2)}, ${seedY.toFixed(2)}, ${seedZ.toFixed(2)})`);
+
+                    translationMatrix.makeTranslation(seedX, seedY, seedZ);
+
+                    // 2. Calculate the FINAL ROTATION
+
+                    const rotRand = Math.random() * Math.PI * 2;
+                    //console.log(rotRand,"rotRand");
+                    rotationMatrix.makeRotationY(rotRand);
+                    //rotationMatrix.makeRotationX(rotRand);
+                    //rotationMatrix.makeRotationZ(rotRand);
+                    /*randomEuler.set(
+                        Math.random() * Math.PI * 1,
+                        Math.random() * Math.PI * 1,
+                        Math.random() * Math.PI * 1
                     );
+                    rotationMatrix.makeRotationFromEuler(randomEuler);
+                        */
+                    // 3. Combine matrices in the CORRECT ORDER: Translation * Rotation * Scale
+                    // This means "first scale it, then rotate it, then move it".
+                    // We achieve this by multiplying from right to left.
+                    finalMatrix.multiplyMatrices(rotationMatrix, scaleMatrix); // Result = Rotation * Scale
+                    finalMatrix.premultiply(translationMatrix); // Result = Translation * (Rotation * Scale)
+
+                    // 4. Apply the final combined matrix to a new seed clone.
+                    const seed = this.seedMeshTemplate.clone();
+                    seed.matrix.copy(finalMatrix);
+                    seed.matrixAutoUpdate = false;
 
                     seed.traverse(child => {
                         if (child.isMesh) {
@@ -281,9 +339,12 @@ export default class GameScene {
         }
     }
 
+
+
+
     orientCameraForPlayer(isPlayer1) {
         const yPos = isPlayer1 ? -280 : 280;
-        this.camera.position.set(0, yPos, 220);
+        this.camera.position.set(0, yPos, 320);
         this.controls.target.set(0, 0, 0);
     }
 
