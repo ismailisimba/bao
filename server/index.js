@@ -130,6 +130,9 @@ io.on('connection', (socket) => {
                     const winnerId = finalState.winner === 1 ? game.player1_id : game.player2_id;
                     const loserId = finalState.winner === 1 ? game.player2_id : game.player1_id;
                     await db.query('INSERT INTO game_results (game_id, winner_profile_id, loser_profile_id) VALUES ($1, $2, $3)', [gameId, winnerId, loserId]);
+                    // Update wins and losses for bao_profiles
+                    await db.query('UPDATE bao_profiles SET wins = COALESCE(wins,0) + 1 WHERE id = $1', [winnerId]);
+                    await db.query('UPDATE bao_profiles SET losses = COALESCE(losses,0) + 1 WHERE id = $1', [loserId]);
                 }
             }
 
