@@ -24,8 +24,8 @@ woodRoughness,
 woodNormal
 ] = await Promise.all([
 textureLoader.loadAsync(GCS_ASSET_URL + 'wood_albedo.jpg'),
-textureLoader.loadAsync(GCS_ASSET_URL + 'wood_roughness.jpg'),
-textureLoader.loadAsync(GCS_ASSET_URL + 'wood_normal.jpg')
+//textureLoader.loadAsync(GCS_ASSET_URL + 'wood_roughness.jpg'),
+//textureLoader.loadAsync(GCS_ASSET_URL + 'wood_normal.jpg')
 ]);
 
 woodAlbedo.colorSpace = THREE.SRGBColorSpace;

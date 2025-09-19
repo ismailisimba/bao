@@ -63,8 +63,19 @@ io.on('connection', (socket) => {
                 socket.emit('error', { message: 'Game not found.' });
                 return;
             }
+            // Add player names to game state
+            const game = gameRes.rows[0];
+            const state = game.game_state;
+            const [p1, p2] = await Promise.all([
+                db.query('SELECT display_name FROM bao_profiles WHERE id = $1', [game.player1_id]),
+                game.player2_id ? db.query('SELECT display_name FROM bao_profiles WHERE id = $1', [game.player2_id]) : Promise.resolve({ rows: [] })
+            ]);
+            state.player1_id = game.player1_id;
+            state.player2_id = game.player2_id;
+            state.player1_name = p1.rows[0]?.display_name || 'Player 1';
+            state.player2_name = p2.rows[0]?.display_name || 'Player 2';
             // On join, we only send the state, not an animation sequence
-            socket.emit('game_state_update', gameRes.rows[0].game_state);
+            socket.emit('game_state_update', state);
 
         } catch (error) {
             console.error('Join game error:', error);
@@ -90,6 +101,16 @@ io.on('connection', (socket) => {
             // 3. Process the move, getting back the final state and the animation sequence
             const { finalState, moveSequence } = makeMove(gameState, move);
 
+            // Add player names to finalState
+            const [p1, p2] = await Promise.all([
+                db.query('SELECT display_name FROM bao_profiles WHERE id = $1', [game.player1_id]),
+                game.player2_id ? db.query('SELECT display_name FROM bao_profiles WHERE id = $1', [game.player2_id]) : Promise.resolve({ rows: [] })
+            ]);
+            finalState.player1_id = game.player1_id;
+            finalState.player2_id = game.player2_id;
+            finalState.player1_name = p1.rows[0]?.display_name || 'Player 1';
+            finalState.player2_name = p2.rows[0]?.display_name || 'Player 2';
+
             // 4. Save the new final state to the database
             await db.query('UPDATE games SET game_state = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [
                 JSON.stringify(finalState),
@@ -98,6 +119,19 @@ io.on('connection', (socket) => {
 
             // 5. Broadcast the final state AND the sequence to EVERYONE in the room
             io.to(gameId).emit('game_state_update', { finalState, moveSequence });
+
+            // Log game result if game is over
+            if (finalState.gameOver && finalState.winner) {
+                // Mark game as finished
+                await db.query('UPDATE games SET status = $1 WHERE id = $2', ['finished', gameId]);
+                // Insert result if not already logged
+                const existing = await db.query('SELECT id FROM game_results WHERE game_id = $1', [gameId]);
+                if (existing.rows.length === 0) {
+                    const winnerId = finalState.winner === 1 ? game.player1_id : game.player2_id;
+                    const loserId = finalState.winner === 1 ? game.player2_id : game.player1_id;
+                    await db.query('INSERT INTO game_results (game_id, winner_profile_id, loser_profile_id) VALUES ($1, $2, $3)', [gameId, winnerId, loserId]);
+                }
+            }
 
         } catch (error) {
             console.error(`Error on make_move for game ${gameId}:`, error);

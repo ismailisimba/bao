@@ -1,0 +1,10 @@
+# Node dependencies
+server/node_modules
+
+# Environment variables file
+server/.env
+
+!public/assets
+
+# macOS folder
+.DS_Store

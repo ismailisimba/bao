@@ -124,31 +124,42 @@ export default class GameScene {
     }
 
     createHoverIndicators() {
-        const planeWidth = this.boardDimensions.width;
-        const planeHeight = this.boardDimensions.depth / 2 * 1.1;
-        const indicatorGeometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
-
-        const p1Material = new THREE.MeshBasicMaterial({ color: 0x61afef, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
-        this.player1Indicator = new THREE.Mesh(indicatorGeometry, p1Material);
+        // Hollow rectangle geometry for each player's side
+        const width = this.boardDimensions.width;
+        const height = this.boardDimensions.depth / 2 * 1.1;
+        const borderColor1 = 0x61afef;
+        const borderColor2 = 0xe06c75;
+        const borderThickness = 0.8;
+        // Helper to create hollow rectangle (as LineSegments)
+        function createRect(w, h, color) {
+            const shape = new THREE.Shape();
+            shape.moveTo(-w/2, -h/2);
+            shape.lineTo(w/2, -h/2);
+            shape.lineTo(w/2, h/2);
+            shape.lineTo(-w/2, h/2);
+            shape.lineTo(-w/2, -h/2);
+            const points = shape.getPoints();
+            const geometry = new THREE.BufferGeometry().setFromPoints(points.map(p => new THREE.Vector3(p.x, p.y, 0)));
+            const material = new THREE.LineBasicMaterial({ color, linewidth: borderThickness });
+            return new THREE.Line(geometry, material);
+        }
+        this.player1Indicator = createRect(width, height, borderColor1);
         this.player1Indicator.rotation.x = -Math.PI / 2;
-        this.player1Indicator.position.set(-38, this.pitPositions[0].y+0.1, this.boardDimensions.depth-33);
+        this.player1Indicator.position.set(-width/4, this.pitPositions[0].y+0.2, 0);
         this.player1Indicator.visible = false;
         this.scene.add(this.player1Indicator);
 
-        const p2Material = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
-        this.player2Indicator = new THREE.Mesh(indicatorGeometry, p2Material);
+        this.player2Indicator = createRect(width, height, borderColor2);
         this.player2Indicator.rotation.x = -Math.PI / 2;
-        this.player2Indicator.position.set(38, this.pitPositions[0].y+0.1, this.boardDimensions.depth-33);
+        this.player2Indicator.position.set(width/4, this.pitPositions[0].y+0.2, 0);
         this.player2Indicator.visible = false;
         this.scene.add(this.player2Indicator);
 
-        // --- CHANGE: Apply conditional rotation based on board orientation ---
         if (!this.isBoardXLonger) {
-            // If the board is deeper than it is wide, the long side of the plane
-            // (created along its width) needs to be aligned with the Z-axis.
-            // A 90-degree rotation around the Y-axis achieves this.
             this.player1Indicator.rotation.z = Math.PI / 2;
             this.player2Indicator.rotation.z = Math.PI / 2;
+            this.player1Indicator.position.set(-height/2 -3, this.pitPositions[0].y+0.2, height+27);
+            this.player2Indicator.position.set(height/2 +3, this.pitPositions[0].y+0.2, height+27);
         }
     }
     
@@ -177,7 +188,7 @@ export default class GameScene {
         this.createPitMapUI();
         this.scene = new THREE.Scene();
         this.camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 10, 5000);
-        this.camera.position.set(0, 400, 500);
+        this.camera.position.set(0, 0, 0);
         this.camera.lookAt(0, 0, 0);
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(window.devicePixelRatio);
@@ -231,6 +242,24 @@ export default class GameScene {
             this.cameraOriented = true;
         }
 
+        // --- Overlay: Set player info ---
+        const currentPlayerNum = gameState.currentPlayer;
+        const isPlayer1 = myProfileId === gameState.player1_id;
+        const player1Name = gameState.player1_name|| 'Player 1';
+        const player2Name = gameState.player2_name || 'Player 2';
+        const currentPlayerName = isPlayer1 ? player1Name : player2Name;
+        const opponentName = isPlayer1 ? player2Name : player1Name;
+        const currentPlayerColor = currentPlayerNum === 1 ? '#e06c75' : '#61afef';
+        const opponentColor = currentPlayerNum === 1 ? '#61afef' : '#e06c75';
+        const currentPlayerNameEl = document.getElementById('current-player-name');
+        const currentPlayerColorEl = document.getElementById('current-player-color');
+        const opponentNameEl = document.getElementById('opponent-name');
+        const opponentColorEl = document.getElementById('opponent-color');
+        if (currentPlayerNameEl) currentPlayerNameEl.textContent = currentPlayerName;
+        if (currentPlayerColorEl) currentPlayerColorEl.style.background = currentPlayerColor;
+        if (opponentNameEl) opponentNameEl.textContent = opponentName;
+        if (opponentColorEl) opponentColorEl.style.background = opponentColor;
+
         this.seedsGroup.clear();
         this.seedMeshesByPit.forEach(pit => pit.length = 0);
 
@@ -240,14 +269,12 @@ export default class GameScene {
                 const pos = this.getSeedRestingPosition(pitIndex);
                 seed.position.copy(pos);
                 seed.rotation.y = Math.random() * Math.PI * 2;
-                
                 seed.traverse(child => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; } });
-
                 this.seedsGroup.add(seed);
                 this.seedMeshesByPit[pitIndex].push(seed);
             }
         });
-        
+
         const uiMessage = document.getElementById('ui-message');
         if (uiMessage) {
             uiMessage.textContent = gameState.message || `Player ${gameState.currentPlayer}'s turn.`;
@@ -357,10 +384,22 @@ export default class GameScene {
     }
 
     orientCameraForPlayer(isPlayer1) {
-        const yPos = isPlayer1 ? 400 : -400;
-        const zPos = 500;
-        gsap.to(this.camera.position, { x: 0, y: yPos, z: zPos, duration: 1.5, ease: 'power2.inOut', onUpdate: () => this.camera.lookAt(0,0,0) });
-        gsap.to(this.controls.target, { x: 0, y: 0, z: 0, duration: 1.5, ease: 'power2.inOut' });
+        // Camera higher, looking down, and offset left by half the board's long side
+        // Zoom in 2.5x closer than before
+        const dist = 400 / 2.5;
+        let camX = 0, camY = 900 / 2.5, camZ = 0;
+        let lookAt = new THREE.Vector3(0, 0, 120);
+        const offset = (this.isBoardXLonger ? this.boardDimensions.width : this.boardDimensions.depth) / 4;
+        if (this.isBoardXLonger) {
+            camZ = isPlayer1 ? dist : -dist;
+            camX = isPlayer1 ? -offset/2 : offset/2;
+        } else {
+            camX = isPlayer1 ? -dist : dist;
+            camZ = isPlayer1 ? -offset/2 : offset/2;
+        }
+        // Look at the center of the board
+        gsap.to(this.camera.position, { x: camX, y: camY, z: camZ, duration: 1.5, ease: 'power2.inOut', onUpdate: () => this.camera.lookAt(lookAt) });
+        gsap.to(this.controls.target, { x: lookAt.x, y: lookAt.y, z: lookAt.z, duration: 1.5, ease: 'power2.inOut' });
     }
 
     onCanvasMouseDown(event) {
@@ -378,20 +417,22 @@ export default class GameScene {
     }
 
     onCanvasMouseMove(event) {
-        if (this.player1Indicator) this.player1Indicator.visible = true;
-        if (this.player2Indicator) this.player2Indicator.visible = true;
+        // Only show indicators if mouse is over/near the board
         this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         this.mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
         this.raycaster.setFromCamera(this.mouse, this.camera);
         const intersects = this.raycaster.intersectObjects(this.interactivePits);
-        if (intersects.length > 0) {
+        const boardHover = intersects.length > 0;
+        if (this.player1Indicator) this.player1Indicator.visible = boardHover;
+        if (this.player2Indicator) this.player2Indicator.visible = boardHover;
+        if (boardHover) {
             const pitIndex = intersects[0].object.userData.pitIndex;
             if (pitIndex !== this.lastHoveredPitIndex) {
                 if (this.lastHoveredPitIndex !== null && this.pitMapSpans[this.lastHoveredPitIndex]) {
                     this.pitMapSpans[this.lastHoveredPitIndex].classList.remove('highlighted-pit');
                 }
                 if (this.pitMapSpans[pitIndex]) {
-                     this.pitMapSpans[pitIndex].classList.add('highlighted-pit');
+                    this.pitMapSpans[pitIndex].classList.add('highlighted-pit');
                 }
                 const seedCount = this.currentGameState ? this.currentGameState.board[pitIndex] : 'N/A';
                 this.hoverInfoElement.textContent = `Pit ${pitIndex} (${seedCount} seeds)`;
