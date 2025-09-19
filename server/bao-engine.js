@@ -280,7 +280,7 @@ function checkWinCondition(board, nextPlayer) {
     }
 
     for (let i = outerRowStart; i <= outerRowEnd; i++) {
-        if (board[i] > 1) {
+        if (board[i] > 1 && board[i] < 10) {
             hasValidMoves = true;
             break;
         }
