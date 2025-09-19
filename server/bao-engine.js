@@ -273,7 +273,8 @@ function checkWinCondition(board, nextPlayer) {
 
     let hasValidMoves = false;
     for (let i = innerRowStart; i <= innerRowEnd; i++) {
-        if (board[i] > 0) {
+        if (board[i] > 1 && board[i] < 10) {
+            console.log("Valid move found in inner row:", i, board[i]);
             hasValidMoves = true;
             break;
         }
@@ -281,6 +282,7 @@ function checkWinCondition(board, nextPlayer) {
 
     for (let i = outerRowStart; i <= outerRowEnd; i++) {
         if (board[i] > 1 && board[i] < 10) {
+            console.log("Valid move found in inner row:", i, board[i]);
             hasValidMoves = true;
             break;
         }
@@ -289,6 +291,9 @@ function checkWinCondition(board, nextPlayer) {
     if (!hasValidMoves) {
         return { gameOver: true, winner: nextPlayer === 1 ? 2 : 1 };
     }
+
+
+    console.log("No win condition met.",hasValidMoves);
     return { gameOver: false, winner: null };
 }
 
