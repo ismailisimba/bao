@@ -1,7 +1,7 @@
 {
-  "name": "server",
+  "name": "bao-game-server",
   "version": "1.0.0",
-  "description": "",
+  "description": "Bao board game – multiplayer with AI",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -16,7 +16,7 @@
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.16.3",
+    "mongoose": "^8.4.0",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
