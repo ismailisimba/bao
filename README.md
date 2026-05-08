@@ -10,7 +10,7 @@ license: mit
 
 # Bao – The East African Board Game
 
-A multiplayer real-time implementation of **Bao la Kiswahili**, the ancient Swahili mancala strategy game, built with Node.js, Socket.IO, Three.js, and MongoDB.
+A multiplayer real-time implementation of **Bao la Kiswahili**, the ancient Swahili mancala strategy game, built with Node.js, Socket.IO, Three.js, and MongoDB. You can play it [on this link](https://eznd-bao.hf.space/)
 
 ## Features
 - 🎮 **Multiplayer** – play against friends in real time
