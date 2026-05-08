@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bao – Leaderboard</title>
+    <meta name="description" content="Global leaderboard for Bao la Kiswahili – see top players ranked by wins.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-deep: #0d0805;
+            --bg-surface: #1a0f08;
+            --bg-card: #261508;
+            --gold: #d4a437;
+            --gold-dim: #9a7520;
+            --gold-glow: rgba(212,164,55,0.12);
+            --cream: #f5e6d3;
+            --cream-dim: #b8a090;
+            --green: #6ab04c;
+            --red: #e06c75;
+            --glass-border: rgba(212,164,55,0.2);
+            --radius: 14px;
+        }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-deep);
+            color: var(--cream);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        /* Background glow */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -30%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 700px;
+            height: 500px;
+            background: radial-gradient(ellipse, rgba(212,164,55,0.07) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        /* NAV */
+        nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 40px;
+            border-bottom: 1px solid var(--glass-border);
+            background: rgba(13,8,5,0.9);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .nav-logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--gold);
+            letter-spacing: 4px;
+            text-decoration: none;
+        }
+        .nav-back {
+            padding: 8px 20px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            color: var(--cream);
+            text-decoration: none;
+            font-size: 0.88rem;
+            transition: 0.2s;
+        }
+        .nav-back:hover { border-color: var(--gold-dim); color: var(--gold); }
+
+        /* PAGE */
+        .page {
+            max-width: 820px;
+            margin: 0 auto;
+            padding: 48px 24px 80px;
+        }
+        .page-header { text-align: center; margin-bottom: 40px; }
+        .page-header h1 { font-size: 2.4rem; font-weight: 700; color: var(--gold); margin-bottom: 8px; }
+        .page-header p { color: var(--cream-dim); font-size: 0.95rem; }
+
+        /* TABLE CARD */
+        .table-card {
+            background: rgba(26,15,8,0.85);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+        }
+        table { width: 100%; border-collapse: collapse; }
+        thead { background: rgba(212,164,55,0.08); }
+        thead th {
+            padding: 14px 18px;
+            text-align: left;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--cream-dim);
+            font-weight: 600;
+            border-bottom: 1px solid var(--glass-border);
+        }
+        tbody tr {
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            transition: background 0.15s;
+        }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: rgba(212,164,55,0.04); }
+        td {
+            padding: 14px 18px;
+            font-size: 0.93rem;
+            vertical-align: middle;
+        }
+        /* Rank column */
+        .rank-col { width: 60px; text-align: center; font-weight: 700; }
+        .rank-medal { font-size: 1.3rem; }
+        .rank-num { color: var(--cream-dim); font-size: 0.9rem; }
+
+        /* Player name */
+        .player-name { font-weight: 600; color: var(--cream); }
+        .player-name.top3 { color: var(--gold); }
+
+        /* Stats */
+        .stat-wins { color: var(--green); font-weight: 600; }
+        .stat-losses { color: var(--red); }
+        .stat-rate {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 10px;
+            font-size: 0.82rem;
+            font-weight: 600;
+        }
+        .rate-high { background: rgba(106,176,76,0.15); color: var(--green); }
+        .rate-mid  { background: rgba(212,164,55,0.12); color: var(--gold); }
+        .rate-low  { background: rgba(224,108,117,0.12); color: var(--red); }
+
+        /* Win bar */
+        .win-bar-wrap { width: 80px; height: 5px; background: rgba(255,255,255,0.08); border-radius: 3px; }
+        .win-bar { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #6ab04c, #d4a437); }
+
+        /* Loading / empty */
+        .state-msg {
+            text-align: center;
+            padding: 48px 24px;
+            color: var(--cream-dim);
+            font-size: 0.95rem;
+        }
+        .state-msg .icon { font-size: 2.5rem; margin-bottom: 12px; }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 28px;
+        }
+        .page-btn {
+            padding: 8px 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            color: var(--cream);
+            cursor: pointer;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.88rem;
+            transition: 0.2s;
+        }
+        .page-btn:hover:not(:disabled) { border-color: var(--gold-dim); color: var(--gold); }
+        .page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+        .page-info { color: var(--cream-dim); font-size: 0.88rem; }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .table-card { animation: fadeUp 0.4s ease; }
+
+        @media (max-width: 600px) {
+            nav { padding: 14px 20px; }
+            .page { padding: 28px 12px 60px; }
+            .win-bar-wrap { display: none; }
+            td, thead th { padding: 10px 10px; font-size: 0.83rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <a class="nav-logo" href="/">BAO</a>
+        <a class="nav-back" href="/">← Back to Game</a>
+    </nav>
+
+    <div class="page">
+        <div class="page-header">
+            <h1>🏆 Leaderboard</h1>
+            <p>Global rankings – top Bao players worldwide</p>
+        </div>
+
+        <div class="table-card" id="table-card">
+            <div class="state-msg" id="loading-state">
+                <div class="icon">⏳</div>
+                <div>Loading rankings…</div>
+            </div>
+            <table id="lb-table" style="display:none;">
+                <thead>
+                    <tr>
+                        <th class="rank-col">Rank</th>
+                        <th>Player</th>
+                        <th>Wins</th>
+                        <th>Losses</th>
+                        <th>Played</th>
+                        <th>Win Rate</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="lb-body"></tbody>
+            </table>
+        </div>
+
+        <div class="pagination" id="pagination" style="display:none;">
+            <button class="page-btn" id="prev-btn" disabled>← Prev</button>
+            <span class="page-info" id="page-info">Page 1</span>
+            <button class="page-btn" id="next-btn">Next →</button>
+        </div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+
+        function rankDisplay(rank) {
+            if (rank === 1) return '<span class="rank-medal">🥇</span>';
+            if (rank === 2) return '<span class="rank-medal">🥈</span>';
+            if (rank === 3) return '<span class="rank-medal">🥉</span>';
+            return `<span class="rank-num">${rank}</span>`;
+        }
+
+        function rateClass(rate) {
+            if (rate >= 60) return 'rate-high';
+            if (rate >= 40) return 'rate-mid';
+            return 'rate-low';
+        }
+
+        async function loadPage(page) {
+            document.getElementById('loading-state').style.display = 'block';
+            document.getElementById('lb-table').style.display = 'none';
+            document.getElementById('pagination').style.display = 'none';
+
+            try {
+                const res = await fetch(`/api/games/leaderboard?page=${page}`);
+                if (!res.ok) throw new Error('Failed');
+                const data = await res.json();
+
+                const body = document.getElementById('lb-body');
+                body.innerHTML = '';
+
+                if (data.profiles.length === 0) {
+                    document.getElementById('loading-state').innerHTML = '<div class="icon">👻</div><div>No players yet. Be the first!</div>';
+                    document.getElementById('loading-state').style.display = 'block';
+                    return;
+                }
+
+                data.profiles.forEach(p => {
+                    const tr = document.createElement('tr');
+                    const isTop3 = p.rank <= 3;
+                    const barWidth = Math.min(100, p.winRate);
+                    tr.innerHTML = `
+                        <td class="rank-col">${rankDisplay(p.rank)}</td>
+                        <td><span class="player-name ${isTop3 ? 'top3' : ''}">${escHtml(p.displayName || p.username)}</span></td>
+                        <td><span class="stat-wins">↑ ${p.wins}</span></td>
+                        <td><span class="stat-losses">↓ ${p.losses}</span></td>
+                        <td>${p.gamesPlayed}</td>
+                        <td><span class="stat-rate ${rateClass(p.winRate)}">${p.winRate}%</span></td>
+                        <td><div class="win-bar-wrap"><div class="win-bar" style="width:${barWidth}%"></div></div></td>
+                    `;
+                    body.appendChild(tr);
+                });
+
+                document.getElementById('loading-state').style.display = 'none';
+                document.getElementById('lb-table').style.display = 'table';
+                document.getElementById('pagination').style.display = data.totalPages > 1 ? 'flex' : 'none';
+
+                document.getElementById('page-info').textContent = `Page ${data.page} of ${data.totalPages}`;
+                document.getElementById('prev-btn').disabled = data.page <= 1;
+                document.getElementById('next-btn').disabled = data.page >= data.totalPages;
+
+                currentPage = data.page;
+            } catch {
+                document.getElementById('loading-state').innerHTML = '<div class="icon">⚠️</div><div>Could not load rankings. Try again later.</div>';
+            }
+        }
+
+        function escHtml(str) {
+            const d = document.createElement('div');
+            d.appendChild(document.createTextNode(str));
+            return d.innerHTML;
+        }
+
+        document.getElementById('prev-btn').addEventListener('click', () => loadPage(currentPage - 1));
+        document.getElementById('next-btn').addEventListener('click', () => loadPage(currentPage + 1));
+
+        loadPage(1);
+    </script>
+</body>
+</html>
