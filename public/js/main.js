@@ -304,12 +304,25 @@ async function handleJoinGame(gameId) {
 // =========================================================
 async function showGame() {
     stopLobbyPoll();
+    // Show loading overlay before init
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) {
+        overlay.classList.remove('hidden');
+        // Reset progress
+        const bar = document.getElementById('loading-bar');
+        const status = document.getElementById('loading-status');
+        if (bar) bar.style.width = '0%';
+        if (status) status.textContent = 'Initializing…';
+    }
+    showScreen('game-screen');
     if (!gameSceneInstance) {
         const canvas = document.getElementById('game-canvas');
         gameSceneInstance = new GameScene(canvas, handlePitClick);
         await gameSceneInstance.init();
+    } else {
+        // Scene already initialized, just hide overlay immediately
+        if (overlay) overlay.classList.add('hidden');
     }
-    showScreen('game-screen');
 }
 
 // =========================================================
@@ -335,10 +348,14 @@ function onGameStateUpdate(updateData) {
         if (updateData.finalState.gameOver) {
             const winner = updateData.finalState.winner;
             const myNum = updateData.finalState.player1_id === myProfileId ? 1 : 2;
+            const winnerName = winner === 1
+                ? (updateData.finalState.player1_name || 'Player 1')
+                : (updateData.finalState.player2_name || 'Player 2');
+            const isMyWin = winner === myNum;
             setTimeout(() => {
-                const msg = winner === myNum ? '🎉 You won!' : '😔 You lost.';
-                showToast(msg, winner === myNum ? 'success' : 'error');
-            }, 2000);
+                const msg = isMyWin ? `🎉 You won! Great game!` : `😔 ${winnerName} wins. Better luck next time!`;
+                showToast(msg, isMyWin ? 'success' : 'error');
+            }, 2500);
         }
     } else {
         gameSceneInstance.renderGameState(updateData, myProfileId);

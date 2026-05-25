@@ -155,6 +155,22 @@
     </div>
 </div>
 
+<!-- ============================== LOADING OVERLAY ============================== -->
+<div id="loading-overlay">
+    <div class="loading-content">
+        <div class="loading-logo">BAO</div>
+        <div class="loading-subtitle">The East African Board Game</div>
+        <div class="loading-spinner">
+            <div class="spinner-ring"></div>
+            <div class="spinner-ring inner"></div>
+        </div>
+        <div class="loading-bar-wrap">
+            <div class="loading-bar" id="loading-bar"></div>
+        </div>
+        <div class="loading-status" id="loading-status">Initializing…</div>
+    </div>
+</div>
+
 <!-- ============================== GAME SCREEN ============================== -->
 <div id="game-screen">
     <canvas id="game-canvas"></canvas>
@@ -164,15 +180,27 @@
         <p id="ui-message">Waiting for game to start...</p>
     </div>
     <div id="game-info-container">
-        <div id="player-overlay">
-            <span id="current-player-label">You:</span>
-            <span id="current-player-name"></span>
-            <span id="current-player-color" style="display:inline-block;width:12px;height:12px;border-radius:50%;margin-left:4px;"></span>
-            <span style="margin:0 8px;color:var(--cream-dim);">vs</span>
-            <span id="opponent-name"></span>
-            <span id="opponent-color" style="display:inline-block;width:12px;height:12px;border-radius:50%;margin-left:4px;"></span>
+        <!-- Player cards -->
+        <div id="players-panel">
+            <div class="player-card" id="player1-card">
+                <div class="player-card-badge p1-badge">P1</div>
+                <div class="player-card-info">
+                    <div class="player-card-name" id="player1-card-name">—</div>
+                    <div class="player-card-status" id="player1-card-status"></div>
+                </div>
+                <div class="turn-dot" id="player1-turn-dot"></div>
+            </div>
+            <div class="vs-divider">VS</div>
+            <div class="player-card" id="player2-card">
+                <div class="player-card-badge p2-badge">P2</div>
+                <div class="player-card-info">
+                    <div class="player-card-name" id="player2-card-name">—</div>
+                    <div class="player-card-status" id="player2-card-status"></div>
+                </div>
+                <div class="turn-dot" id="player2-turn-dot"></div>
+            </div>
         </div>
-        <div id="hover-info">Hover over a pit...</div>
+        <div id="hover-info">Hover over a pit…</div>
         <div id="pit-map"></div>
     </div>
 </div>

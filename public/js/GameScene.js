@@ -21,7 +21,7 @@ export default class GameScene {
     boardDimensions = { width: 0, height: 0, center: new THREE.Vector3() };
     pitPositions = [];
     interactivePits = [];
-    isBoardXLonger = true; // NEW: To track board orientation, default to true
+    isBoardXLonger = true;
 
     // Board layout constants
     COLS = 8;
@@ -35,10 +35,13 @@ export default class GameScene {
     player1Indicator;
     player2Indicator;
     lastHoveredPitIndex = null;
-    
+    myProfileId = null;
+
     // --- Persistent seed mesh tracking for animation ---
     seedMeshesByPit = [];
 
+    // --- Queued state for handling updates that arrive during animation ---
+    pendingState = null;
 
     constructor(canvas, onPitClickCallback) {
         this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -46,9 +49,23 @@ export default class GameScene {
         this.raycaster = new THREE.Raycaster();
         this.mouse = new THREE.Vector2();
         this.seedsGroup = new THREE.Group();
-        // Initialize the tracking array
         for (let i = 0; i < 32; i++) {
             this.seedMeshesByPit.push([]);
+        }
+    }
+
+    // --- Loading progress helper ---
+    _setLoadingProgress(percent, status) {
+        const bar = document.getElementById('loading-bar');
+        const statusEl = document.getElementById('loading-status');
+        if (bar) bar.style.width = `${percent}%`;
+        if (statusEl) statusEl.textContent = status;
+    }
+
+    _hideLoadingOverlay() {
+        const overlay = document.getElementById('loading-overlay');
+        if (overlay) {
+            overlay.classList.add('hidden');
         }
     }
 
@@ -58,9 +75,8 @@ export default class GameScene {
         boundingBox.getSize(boardSize);
         boundingBox.getCenter(this.boardDimensions.center);
 
-        // --- CHANGE: Store the board's orientation ---
         this.isBoardXLonger = boardSize.x >= boardSize.z;
-        
+
         const longerSide = this.isBoardXLonger ? boardSize.x : boardSize.z;
         const shorterSide = this.isBoardXLonger ? boardSize.z : boardSize.x;
 
@@ -98,7 +114,6 @@ export default class GameScene {
                 if (this.isBoardXLonger) {
                     position = new THREE.Vector3(pitX_on_plane, topOfBoardY, pitZ_on_plane);
                 } else {
-                    // Swap X and Z if the board is deeper than it is wide
                     position = new THREE.Vector3(pitZ_on_plane, topOfBoardY, pitX_on_plane + this.boardDimensions.depth - 32);
                 }
                 this.pitPositions[pitIndex] = position;
@@ -124,13 +139,11 @@ export default class GameScene {
     }
 
     createHoverIndicators() {
-        // Hollow rectangle geometry for each player's side
         const width = this.boardDimensions.width;
         const height = this.boardDimensions.depth / 2 * 1.1;
         const borderColor1 = 0x61afef;
         const borderColor2 = 0xe06c75;
         const borderThickness = 0.8;
-        // Helper to create hollow rectangle (as LineSegments)
         function createRect(w, h, color) {
             const shape = new THREE.Shape();
             shape.moveTo(-w/2, -h/2);
@@ -162,8 +175,7 @@ export default class GameScene {
             this.player2Indicator.position.set(height/2 +3, this.pitPositions[0].y+0.2, height+27);
         }
     }
-    
-    // Unchanged from here...
+
     createPitMapUI() {
         const pitMapContainer = document.getElementById('pit-map');
         pitMapContainer.innerHTML = '';
@@ -200,39 +212,112 @@ export default class GameScene {
         this.controls.enableDamping = true; this.controls.dampingFactor = 0.05; this.controls.enablePan = false;
         this.controls.minDistance = 150; this.controls.maxDistance = 1000;
         this.controls.minPolarAngle = Math.PI / 4; this.controls.maxPolarAngle = Math.PI / 2.2;
+
+        this._setLoadingProgress(10, 'Loading environment…');
+
         const rgbeLoader = new RGBELoader();
         const textureLoader = new THREE.TextureLoader();
         const GCS_ASSET_URL = './assets/';
-        rgbeLoader.load(GCS_ASSET_URL + 'room_env.hdr', (t) => { t.mapping = THREE.EquirectangularReflectionMapping; this.scene.background = t; this.scene.environment = t; });
+
+        // Load HDR environment
+        await new Promise((resolve) => {
+            rgbeLoader.load(GCS_ASSET_URL + 'room_env.hdr', (t) => {
+                t.mapping = THREE.EquirectangularReflectionMapping;
+                this.scene.background = t;
+                this.scene.environment = t;
+                resolve();
+            });
+        });
+
+        this._setLoadingProgress(35, 'Loading table texture…');
+
         const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
         directionalLight.position.set(-150, 200, 300); directionalLight.castShadow = true;
         directionalLight.shadow.mapSize.width = 4096; directionalLight.shadow.mapSize.height = 4096;
         this.scene.add(directionalLight);
+
         const floorGeometry = new THREE.PlaneGeometry(5000, 5000);
-        const floorTexture = textureLoader.load(GCS_ASSET_URL + 'table_texture.jpg');
+        const floorTexture = await textureLoader.loadAsync(GCS_ASSET_URL + 'table_texture.jpg');
         floorTexture.wrapS = THREE.RepeatWrapping; floorTexture.wrapT = THREE.RepeatWrapping; floorTexture.repeat.set(5, 5);
         const floorMaterial = new THREE.MeshStandardMaterial({ map: floorTexture, roughness: 0.7 });
         const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial);
-        floorMesh.rotation.x = -Math.PI / 2; floorMesh.position.y = -50; floorMesh.receiveShadow = true; this.scene.add(floorMesh);
+        floorMesh.rotation.x = -Math.PI / 2; floorMesh.position.y = -50; floorMesh.receiveShadow = true;
+        this.scene.add(floorMesh);
+
+        this._setLoadingProgress(55, 'Loading board model…');
+
         const { boardModel, seedMeshTemplate } = await loadGameAssets();
         this.seedMeshTemplate = seedMeshTemplate;
         new THREE.Box3().setFromObject(this.seedMeshTemplate).getSize(this.seedDimensions);
         this.scene.add(boardModel);
         this.scene.add(this.seedsGroup);
+
+        this._setLoadingProgress(80, 'Building board geometry…');
+
         this.createPitGeometry(boardModel);
         this.createHoverIndicators();
+
+        this._setLoadingProgress(95, 'Starting renderer…');
+
         window.addEventListener('resize', this.onWindowResize.bind(this));
         this.renderer.domElement.addEventListener('mousemove', this.onCanvasMouseMove.bind(this));
         this.renderer.domElement.addEventListener('mouseleave', this.onCanvasMouseLeave.bind(this));
         this.renderer.domElement.addEventListener('mousedown', this.onCanvasMouseDown.bind(this));
         this.animate();
+
+        // Small delay so the 100% state is visible briefly
+        await new Promise(r => setTimeout(r, 300));
+        this._setLoadingProgress(100, 'Ready!');
+        await new Promise(r => setTimeout(r, 400));
+        this._hideLoadingOverlay();
+    }
+
+    // --- Update the player panel with P1/P2 labels, YOU badge, and turn indicator ---
+    _updatePlayerPanel(gameState, myProfileId) {
+        const isPlayer1 = myProfileId === gameState.player1_id;
+        const player1Name = gameState.player1_name || 'Player 1';
+        const player2Name = gameState.player2_name || (gameState.vsAi ? '🤖 Computer' : 'Player 2');
+        const currentPlayer = gameState.currentPlayer; // 1 or 2
+
+        const p1Card = document.getElementById('player1-card');
+        const p2Card = document.getElementById('player2-card');
+        const p1Name = document.getElementById('player1-card-name');
+        const p2Name = document.getElementById('player2-card-name');
+        const p1Status = document.getElementById('player1-card-status');
+        const p2Status = document.getElementById('player2-card-status');
+
+        if (!p1Card || !p2Card) return;
+
+        // Set names with YOU indicator
+        if (p1Name) {
+            p1Name.textContent = player1Name;
+            if (isPlayer1) p1Name.textContent += ' (You)';
+        }
+        if (p2Name) {
+            p2Name.textContent = player2Name;
+            if (!isPlayer1) p2Name.textContent += ' (You)';
+        }
+
+        // Turn highlighting
+        if (currentPlayer === 1) {
+            p1Card.classList.add('active-turn');
+            p2Card.classList.remove('active-turn');
+            if (p1Status) p1Status.textContent = isPlayer1 ? '▶ Your turn' : '▶ Their turn';
+            if (p2Status) p2Status.textContent = '';
+        } else {
+            p2Card.classList.add('active-turn');
+            p1Card.classList.remove('active-turn');
+            if (p2Status) p2Status.textContent = !isPlayer1 ? '▶ Your turn' : '▶ Their turn';
+            if (p1Status) p1Status.textContent = '';
+        }
     }
 
     renderGameState(gameState, myProfileId) {
         this.currentGameState = gameState;
+        if (myProfileId) this.myProfileId = myProfileId;
 
         if (!this.scene || !this.seedMeshTemplate || this.pitPositions.length === 0) {
-            setTimeout(() => this.renderGameState(gameState, myProfileId), 150);
+            setTimeout(() => this.renderGameState(gameState, myProfileId || this.myProfileId), 150);
             return;
         }
 
@@ -242,24 +327,9 @@ export default class GameScene {
             this.cameraOriented = true;
         }
 
-        // --- Overlay: Set player info ---
-        const currentPlayerNum = gameState.currentPlayer;
-        const isPlayer1 = myProfileId === gameState.player1_id;
-        const player1Name = gameState.player1_name|| 'Player 1';
-        const player2Name = gameState.player2_name || 'Player 2';
-        const currentPlayerName = isPlayer1 ? player1Name : player2Name;
-        const opponentName = isPlayer1 ? player2Name : player1Name;
-        const currentPlayerColor = currentPlayerNum === 1 ? '#e06c75' : '#61afef';
-        const opponentColor = currentPlayerNum === 1 ? '#61afef' : '#e06c75';
-        const currentPlayerNameEl = document.getElementById('current-player-name');
-        const currentPlayerColorEl = document.getElementById('current-player-color');
-        const opponentNameEl = document.getElementById('opponent-name');
-        const opponentColorEl = document.getElementById('opponent-color');
-        if (currentPlayerNameEl) currentPlayerNameEl.textContent = currentPlayerName;
-        if (currentPlayerColorEl) currentPlayerColorEl.style.background = currentPlayerColor;
-        if (opponentNameEl) opponentNameEl.textContent = opponentName;
-        if (opponentColorEl) opponentColorEl.style.background = opponentColor;
+        this._updatePlayerPanel(gameState, myProfileId || this.myProfileId);
 
+        // Clear and rebuild seeds
         this.seedsGroup.clear();
         this.seedMeshesByPit.forEach(pit => pit.length = 0);
 
@@ -282,19 +352,53 @@ export default class GameScene {
     }
 
     playMoveAnimation(sequence, finalState, myProfileId) {
-        if (this.isAnimating) return;
-        this.isAnimating = true;
-        this.currentGameState = finalState;
+        if (myProfileId) this.myProfileId = myProfileId;
 
-        document.getElementById('ui-message').textContent = `Animating player ${sequence[0].action === 'lift' ? (sequence[0].fromPit < 16 ? 1 : 2) : ''}'s move...`;
+        // If scene isn't ready yet, defer
+        if (!this.scene || !this.seedMeshTemplate || this.pitPositions.length === 0) {
+            setTimeout(() => this.playMoveAnimation(sequence, finalState, myProfileId || this.myProfileId), 150);
+            return;
+        }
+
+        // If already animating, queue and bail
+        if (this.isAnimating) {
+            this.pendingState = { sequence, finalState };
+            return;
+        }
+
+        // CRITICAL FIX: If the board hasn't been initialized with seeds yet
+        // (i.e. on first move when no renderGameState was called yet),
+        // we need to figure out the pre-move board state.
+        // We reconstruct it by running the sequence backwards on finalState.
+        // The simplest reliable approach: if seedMeshesByPit is all empty,
+        // prime the board from finalState so seeds exist to animate.
+        const totalSeedsOnBoard = this.seedMeshesByPit.reduce((s, p) => s + p.length, 0);
+        if (totalSeedsOnBoard === 0) {
+            // Prime from final state so we have meshes, then animate
+            this._primeBoardFromState(finalState);
+        }
+
+        this.isAnimating = true;
+        this._updatePlayerPanel(finalState, myProfileId || this.myProfileId);
+
+        const movingPlayerNum = sequence[0]?.fromPit < 16 ? 1 : 2;
+        const uiMessage = document.getElementById('ui-message');
+        if (uiMessage) uiMessage.textContent = `Player ${movingPlayerNum} is moving…`;
 
         let seedsInHand = [];
         const tl = gsap.timeline({
             onComplete: () => {
                 this.syncBoardWithState(finalState);
                 this.isAnimating = false;
-                document.getElementById('ui-message').textContent = finalState.message;
-                console.log("Animation complete.");
+                if (uiMessage) uiMessage.textContent = finalState.message || '';
+                console.log('Animation complete.');
+
+                // Process any queued state
+                if (this.pendingState) {
+                    const { sequence: seq, finalState: fs } = this.pendingState;
+                    this.pendingState = null;
+                    this.playMoveAnimation(seq, fs, this.myProfileId);
+                }
             }
         });
 
@@ -306,7 +410,9 @@ export default class GameScene {
                 case 'lift':
                 case 'relay': {
                     const fromPit = step.fromPit;
-                    const seedsToLift = this.seedMeshesByPit[fromPit].splice(0, step.count);
+                    const available = this.seedMeshesByPit[fromPit];
+                    const countToLift = Math.min(step.count, available.length);
+                    const seedsToLift = available.splice(0, countToLift);
                     seedsInHand.push(...seedsToLift);
                     const pitCenter = this.pitPositions[fromPit];
                     seedsToLift.forEach((seed, i) => {
@@ -319,10 +425,12 @@ export default class GameScene {
                 }
                 case 'capture': {
                     const fromPit = step.fromPit;
-                    const seedsToCapture = this.seedMeshesByPit[fromPit].splice(0, step.count);
+                    const available = this.seedMeshesByPit[fromPit];
+                    const countToCapture = Math.min(step.count, available.length);
+                    const seedsToCapture = available.splice(0, countToCapture);
                     seedsInHand.push(...seedsToCapture);
                     const targetPitCenter = this.pitPositions[step.toPit];
-                     seedsToCapture.forEach((seed, i) => {
+                    seedsToCapture.forEach((seed, i) => {
                         tl.to(seed.position, {
                             x: targetPitCenter.x, y: targetPitCenter.y + 40 + i * 0.5, z: targetPitCenter.z,
                             duration: 0.6, ease: 'power2.inOut'
@@ -350,9 +458,26 @@ export default class GameScene {
         });
     }
 
+    // Prime the board with seed meshes based on a game state
+    // Used when animation arrives before the first renderGameState
+    _primeBoardFromState(state) {
+        this.seedsGroup.clear();
+        this.seedMeshesByPit.forEach(pit => pit.length = 0);
+        state.board.forEach((seedCount, pitIndex) => {
+            for (let i = 0; i < seedCount; i++) {
+                const seed = this.seedMeshTemplate.clone();
+                const pos = this.getSeedRestingPosition(pitIndex);
+                seed.position.copy(pos);
+                seed.rotation.y = Math.random() * Math.PI * 2;
+                seed.traverse(child => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; } });
+                this.seedsGroup.add(seed);
+                this.seedMeshesByPit[pitIndex].push(seed);
+            }
+        });
+    }
+
     getSeedRestingPosition(pitIndex) {
         const pitWorldPosition = this.pitPositions[pitIndex];
-        const seedCountInPit = this.seedMeshesByPit[pitIndex].length;
         const tightRadius = this.seedDimensions.x * 1.5;
         const angle = Math.random() * Math.PI * 2;
         const radius = Math.sqrt(Math.random()) * tightRadius;
@@ -361,9 +486,9 @@ export default class GameScene {
         const seedY = pitWorldPosition.y - 18;
         return new THREE.Vector3(seedX, seedY, seedZ);
     }
-    
+
     syncBoardWithState(finalState) {
-        console.log("Syncing board with final state...");
+        console.log('Syncing board with final state…');
         finalState.board.forEach((expectedCount, pitIndex) => {
             const actualCount = this.seedMeshesByPit[pitIndex].length;
             if (actualCount !== expectedCount) {
@@ -381,11 +506,13 @@ export default class GameScene {
                 }
             }
         });
+        // Update UI message and player panel after sync
+        const uiMessage = document.getElementById('ui-message');
+        if (uiMessage) uiMessage.textContent = finalState.message || `Player ${finalState.currentPlayer}'s turn.`;
+        this._updatePlayerPanel(finalState, this.myProfileId);
     }
 
     orientCameraForPlayer(isPlayer1) {
-        // Camera higher, looking down, and offset left by half the board's long side
-        // Zoom in 2.5x closer than before
         const dist = 400 / 2.5;
         let camX = 0, camY = 900 / 2.5, camZ = 0;
         let lookAt = new THREE.Vector3(0, 0, 120);
@@ -397,7 +524,6 @@ export default class GameScene {
             camX = isPlayer1 ? -dist : dist;
             camZ = isPlayer1 ? -offset/2 : offset/2;
         }
-        // Look at the center of the board
         gsap.to(this.camera.position, { x: camX, y: camY, z: camZ, duration: 1.5, ease: 'power2.inOut', onUpdate: () => this.camera.lookAt(lookAt) });
         gsap.to(this.controls.target, { x: lookAt.x, y: lookAt.y, z: lookAt.z, duration: 1.5, ease: 'power2.inOut' });
     }
@@ -417,7 +543,6 @@ export default class GameScene {
     }
 
     onCanvasMouseMove(event) {
-        // Only show indicators if mouse is over/near the board
         this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         this.mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
         this.raycaster.setFromCamera(this.mouse, this.camera);
@@ -440,7 +565,7 @@ export default class GameScene {
             }
         } else {
             if (this.lastHoveredPitIndex !== null) {
-                this.hoverInfoElement.textContent = 'Hover over a pit...';
+                this.hoverInfoElement.textContent = 'Hover over a pit…';
                 if (this.pitMapSpans[this.lastHoveredPitIndex]) {
                     this.pitMapSpans[this.lastHoveredPitIndex].classList.remove('highlighted-pit');
                 }
@@ -452,7 +577,7 @@ export default class GameScene {
     onCanvasMouseLeave() {
         if (this.player1Indicator) this.player1Indicator.visible = false;
         if (this.player2Indicator) this.player2Indicator.visible = false;
-        this.hoverInfoElement.textContent = 'Hover over a pit...';
+        this.hoverInfoElement.textContent = 'Hover over a pit…';
         if (this.lastHoveredPitIndex !== null && this.pitMapSpans[this.lastHoveredPitIndex]) {
             this.pitMapSpans[this.lastHoveredPitIndex].classList.remove('highlighted-pit');
         }
@@ -464,7 +589,7 @@ export default class GameScene {
         this.controls.update();
         this.renderer.render(this.scene, this.camera);
     }
-    
+
     onWindowResize() {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
