@@ -73,16 +73,26 @@ router.get('/', async (req, res) => {
     }
 });
 
-// GET /api/games/active — get current active game for this user
+// GET /api/games/active — get current active games for this user
 router.get('/active', async (req, res) => {
     const { baoProfileId } = req.user;
     try {
-        const game = await Game.findOne({
+        const games = await Game.find({
             status: { $in: ['active', 'waiting'] },
             $or: [{ player1Id: baoProfileId }, { player2Id: baoProfileId }],
-        });
-        if (!game) return res.status(404).json({ message: 'No active game found.' });
-        res.json({ id: game._id, status: game.status, vsAi: game.vsAi });
+        }).populate('player1Id', 'displayName').populate('player2Id', 'displayName').sort({ createdAt: -1 });
+        
+        res.json(games.map(g => {
+            const isPlayer1 = g.player1Id && g.player1Id._id.toString() === baoProfileId;
+            const opponentName = isPlayer1 ? (g.player2Id?.displayName || 'Waiting for opponent...') : (g.player1Id?.displayName || 'Unknown');
+            
+            return {
+                id: g._id, 
+                status: g.status, 
+                vsAi: g.vsAi,
+                opponentName
+            };
+        }));
     } catch (err) {
         console.error('Active game error:', err);
         res.status(500).json({ message: 'Internal server error' });

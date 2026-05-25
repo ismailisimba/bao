@@ -37,11 +37,15 @@ export default class GameScene {
     lastHoveredPitIndex = null;
     myProfileId = null;
 
-    // --- Persistent seed mesh tracking for animation ---
-    seedMeshesByPit = [];
-
     // --- Queued state for handling updates that arrive during animation ---
     pendingState = null;
+
+    // --- Callback fired when a move animation fully completes (incl. turn delay) ---
+    // Set by main.js: gameSceneInstance.onAnimationComplete = (finalState) => { ... }
+    onAnimationComplete = null;
+
+    // --- Persistent seed mesh tracking for animation ---
+    seedMeshesByPit = [];
 
     constructor(canvas, onPitClickCallback) {
         this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -139,41 +143,117 @@ export default class GameScene {
     }
 
     createHoverIndicators() {
-        const width = this.boardDimensions.width;
-        const height = this.boardDimensions.depth / 2 * 1.1;
-        const borderColor1 = 0x61afef;
-        const borderColor2 = 0xe06c75;
-        const borderThickness = 0.8;
+        // ── Derive every measurement from actual pit positions ──────────────
+        //
+        // Pit layout (isBoardXLonger = true, the common case):
+        //   X axis → board length  (cols 0-7)
+        //   Z axis → board depth   (rows: P1 outer/inner … P2 inner/outer)
+        //
+        //   P1 outer row : pit  0 (col 0) … pit  7 (col 7)  → pitPositions[0]…[7]
+        //   P1 inner row : pit 15 (col 0) … pit  8 (col 7)  → pitPositions[15]…[8]
+        //   P2 inner row : pit 16 (col 0) … pit 23 (col 7)  → pitPositions[16]…[23]
+        //   P2 outer row : pit 31 (col 0) … pit 24 (col 7)  → pitPositions[31]…[24]
+        //
+        // For each axis we want:
+        //   size   = span between the two extreme pit *centres* + 1 row/col worth of margin
+        //   centre = midpoint of those two extremes
+        //   + any board-model origin offset (boardDimensions.center)
+
+        const colorP1 = 0x61afef;   // blue  — matches P1 badge
+        const colorP2 = 0xe06c75;   // red   — matches P2 badge
+
         function createRect(w, h, color) {
             const shape = new THREE.Shape();
             shape.moveTo(-w/2, -h/2);
-            shape.lineTo(w/2, -h/2);
-            shape.lineTo(w/2, h/2);
-            shape.lineTo(-w/2, h/2);
+            shape.lineTo( w/2, -h/2);
+            shape.lineTo( w/2,  h/2);
+            shape.lineTo(-w/2,  h/2);
             shape.lineTo(-w/2, -h/2);
-            const points = shape.getPoints();
-            const geometry = new THREE.BufferGeometry().setFromPoints(points.map(p => new THREE.Vector3(p.x, p.y, 0)));
-            const material = new THREE.LineBasicMaterial({ color, linewidth: borderThickness });
-            return new THREE.Line(geometry, material);
+            const geo = new THREE.BufferGeometry().setFromPoints(
+                shape.getPoints().map(p => new THREE.Vector3(p.x, p.y, 0))
+            );
+            return new THREE.Line(geo, new THREE.LineBasicMaterial({ color }));
         }
-        this.player1Indicator = createRect(width, height, borderColor1);
-        this.player1Indicator.rotation.x = -Math.PI / 2;
-        this.player1Indicator.position.set(-width/4, this.pitPositions[0].y+0.2, 0);
+
+        const boardY = this.pitPositions[0].y + 0.2;
+
+        // Board-model bounding-box centre (handles GLB models whose origin ≠ geometry centre)
+        const bCx = this.boardDimensions.center.x;
+        const bCz = this.boardDimensions.center.z;
+
+        if (this.isBoardXLonger) {
+            // ── Long axis: X ──────────────────────────────────────────────
+            // Leftmost pit centre in X  → pit 0 (col 0, any row)
+            // Rightmost pit centre in X → pit 7 (col 7, any row)
+            const xLeft   = this.pitPositions[0].x;
+            const xRight  = this.pitPositions[7].x;
+            const colSpan = xRight - xLeft;                  // 7 × colWidth
+            const colWidth = colSpan / (this.COLS - 1);      // recover colWidth
+            const rectW   = colSpan + colWidth;              // add half-col margin each side
+            const centreX = (xLeft + xRight) / 2;            // pit midpoint
+
+            // ── Short axis: Z (one rectangle per player) ──────────────────
+            // P1: outer row (most-negative Z) = pitPositions[0].z
+            //     inner row (closer to gap)   = pitPositions[8].z
+            const p1Outer = this.pitPositions[0].z;
+            const p1Inner = this.pitPositions[8].z;   // less negative than outer
+            const p1RowSpan  = p1Inner - p1Outer;     // positive distance between row centres
+            const p1RectH    = p1RowSpan + p1RowSpan; // add half-row margin on each side
+            const p1CentreZ  = (p1Outer + p1Inner) / 2;
+
+            // P2: inner row = pitPositions[16].z, outer row = pitPositions[24].z
+            const p2Inner = this.pitPositions[16].z;
+            const p2Outer = this.pitPositions[24].z;  // more positive than inner
+            const p2RowSpan  = p2Outer - p2Inner;
+            const p2RectH    = p2RowSpan + p2RowSpan;
+            const p2CentreZ  = (p2Inner + p2Outer) / 2;
+
+            this.player1Indicator = createRect(rectW, p1RectH, colorP1);
+            this.player1Indicator.rotation.x = -Math.PI / 2;
+            this.player1Indicator.position.set(centreX, boardY, p1CentreZ);
+
+            this.player2Indicator = createRect(rectW, p2RectH, colorP2);
+            this.player2Indicator.rotation.x = -Math.PI / 2;
+            this.player2Indicator.position.set(centreX, boardY, p2CentreZ);
+
+        } else {
+            // ── Board rotated: long axis is Z ─────────────────────────────
+            // pit  0 → position.z = pitX_on_plane + offset (the long-axis value)
+            // pit  7 → same row, col 7
+            const zLeft   = this.pitPositions[0].z;
+            const zRight  = this.pitPositions[7].z;
+            const colSpan = Math.abs(zRight - zLeft);
+            const colWidth = colSpan / (this.COLS - 1);
+            const rectLen  = colSpan + colWidth;
+            const centreZ  = (zLeft + zRight) / 2;
+
+            // P1/P2 split is along X in this orientation
+            const p1Outer = this.pitPositions[0].x;
+            const p1Inner = this.pitPositions[8].x;
+            const p1RowSpan = Math.abs(p1Inner - p1Outer);
+            const p1RectD   = p1RowSpan + p1RowSpan;
+            const p1CentreX = (p1Outer + p1Inner) / 2;
+
+            const p2Inner = this.pitPositions[16].x;
+            const p2Outer = this.pitPositions[24].x;
+            const p2RowSpan = Math.abs(p2Outer - p2Inner);
+            const p2RectD   = p2RowSpan + p2RowSpan;
+            const p2CentreX = (p2Outer + p2Inner) / 2;
+
+            // createRect(w, h) → after rotation.x=-π/2: w→X, h→Z
+            this.player1Indicator = createRect(p1RectD, rectLen, colorP1);
+            this.player1Indicator.rotation.x = -Math.PI / 2;
+            this.player1Indicator.position.set(p1CentreX, boardY, centreZ);
+
+            this.player2Indicator = createRect(p2RectD, rectLen, colorP2);
+            this.player2Indicator.rotation.x = -Math.PI / 2;
+            this.player2Indicator.position.set(p2CentreX, boardY, centreZ);
+        }
+
         this.player1Indicator.visible = false;
-        this.scene.add(this.player1Indicator);
-
-        this.player2Indicator = createRect(width, height, borderColor2);
-        this.player2Indicator.rotation.x = -Math.PI / 2;
-        this.player2Indicator.position.set(width/4, this.pitPositions[0].y+0.2, 0);
         this.player2Indicator.visible = false;
+        this.scene.add(this.player1Indicator);
         this.scene.add(this.player2Indicator);
-
-        if (!this.isBoardXLonger) {
-            this.player1Indicator.rotation.z = Math.PI / 2;
-            this.player2Indicator.rotation.z = Math.PI / 2;
-            this.player1Indicator.position.set(-height/2 -3, this.pitPositions[0].y+0.2, height+27);
-            this.player2Indicator.position.set(height/2 +3, this.pitPositions[0].y+0.2, height+27);
-        }
     }
 
     createPitMapUI() {
@@ -389,15 +469,25 @@ export default class GameScene {
         const tl = gsap.timeline({
             onComplete: () => {
                 this.syncBoardWithState(finalState);
-                this.isAnimating = false;
                 if (uiMessage) uiMessage.textContent = finalState.message || '';
                 console.log('Animation complete.');
 
-                // Process any queued state
-                if (this.pendingState) {
-                    const { sequence: seq, finalState: fs } = this.pendingState;
-                    this.pendingState = null;
-                    this.playMoveAnimation(seq, fs, this.myProfileId);
+                if (finalState.gameOver) {
+                    // No turn transition — fire the game-over callback immediately
+                    this.isAnimating = false;
+                    if (this.onAnimationComplete) this.onAnimationComplete(finalState);
+                } else {
+                    // Show the between-turn overlay then re-enable input
+                    this._showTurnTransition(finalState, () => {
+                        this.isAnimating = false;
+                        if (this.onAnimationComplete) this.onAnimationComplete(finalState);
+                        // Process any queued state
+                        if (this.pendingState) {
+                            const { sequence: seq, finalState: fs } = this.pendingState;
+                            this.pendingState = null;
+                            this.playMoveAnimation(seq, fs, this.myProfileId);
+                        }
+                    });
                 }
             }
         });
@@ -458,6 +548,49 @@ export default class GameScene {
         });
     }
 
+    // --- Turn transition overlay ---
+    _showTurnTransition(finalState, onDone) {
+        const overlay  = document.getElementById('turn-transition');
+        const inner    = overlay?.querySelector('.turn-transition-inner');
+        const labelEl  = document.getElementById('turn-transition-label');
+        const nameEl   = document.getElementById('turn-transition-name');
+        const subEl    = document.getElementById('turn-transition-sub');
+        if (!overlay) { if (onDone) onDone(); return; }
+
+        const nextPlayer = finalState.currentPlayer; // already updated in finalState
+        const isMe = (nextPlayer === 1)
+            ? (this.myProfileId === finalState.player1_id)
+            : (this.myProfileId === finalState.player2_id);
+        const nextName = (nextPlayer === 1)
+            ? (finalState.player1_name || 'Player 1')
+            : (finalState.player2_name || 'Player 2');
+
+        // Label text
+        if (labelEl) labelEl.textContent = 'Turn complete';
+        if (nameEl)  nameEl.textContent  = nextName;
+        if (subEl)   subEl.textContent   = isMe ? 'Your turn — get ready!' : `${nextName}'s turn`;
+
+        // Colour variant
+        if (inner) {
+            inner.classList.remove('p1-turn', 'p2-turn');
+            inner.classList.add(nextPlayer === 1 ? 'p1-turn' : 'p2-turn');
+            // Re-trigger the scale-in animation by cloning the node
+            const clone = inner.cloneNode(true);
+            inner.parentNode.replaceChild(clone, inner);
+        }
+
+        // Show
+        overlay.classList.remove('hidden');
+
+        // Hold for 1.8 s then hide
+        const DISPLAY_MS = 1800;
+        setTimeout(() => {
+            overlay.classList.add('hidden');
+            // Wait for the CSS fade-out (300 ms) before calling onDone
+            setTimeout(() => { if (onDone) onDone(); }, 320);
+        }, DISPLAY_MS);
+    }
+
     // Prime the board with seed meshes based on a game state
     // Used when animation arrives before the first renderGameState
     _primeBoardFromState(state) {
@@ -489,6 +622,8 @@ export default class GameScene {
 
     syncBoardWithState(finalState) {
         console.log('Syncing board with final state…');
+        this.currentGameState = finalState;
+
         finalState.board.forEach((expectedCount, pitIndex) => {
             const actualCount = this.seedMeshesByPit[pitIndex].length;
             if (actualCount !== expectedCount) {
@@ -510,6 +645,12 @@ export default class GameScene {
         const uiMessage = document.getElementById('ui-message');
         if (uiMessage) uiMessage.textContent = finalState.message || `Player ${finalState.currentPlayer}'s turn.`;
         this._updatePlayerPanel(finalState, this.myProfileId);
+
+        // Force a hover refresh if the mouse is currently resting on a pit
+        if (this.lastHoveredPitIndex !== null && this.hoverInfoElement) {
+            const seedCount = finalState.board[this.lastHoveredPitIndex];
+            this.hoverInfoElement.textContent = `Pit ${this.lastHoveredPitIndex} · ${seedCount} seed${seedCount !== 1 ? 's' : ''}`;
+        }
     }
 
     orientCameraForPlayer(isPlayer1) {
@@ -550,8 +691,28 @@ export default class GameScene {
         const boardHover = intersects.length > 0;
         if (this.player1Indicator) this.player1Indicator.visible = boardHover;
         if (this.player2Indicator) this.player2Indicator.visible = boardHover;
+
         if (boardHover) {
-            const pitIndex = intersects[0].object.userData.pitIndex;
+            // All pit circles are coplanar and can overlap, so instead of
+            // trusting intersects[0] directly, find the pit whose 3D centre
+            // is closest to the ray hit point. This gives the correct pit
+            // even when adjacent circles overlap at the intersection.
+            const hitPoint = intersects[0].point;
+            let closestPitIndex = intersects[0].object.userData.pitIndex;
+            let closestDist = Infinity;
+            for (const hit of intersects) {
+                const idx = hit.object.userData.pitIndex;
+                const pitCenter = this.pitPositions[idx];
+                const dx = hitPoint.x - pitCenter.x;
+                const dz = hitPoint.z - pitCenter.z;
+                const dist = dx * dx + dz * dz;
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestPitIndex = idx;
+                }
+            }
+            const pitIndex = closestPitIndex;
+
             if (pitIndex !== this.lastHoveredPitIndex) {
                 if (this.lastHoveredPitIndex !== null && this.pitMapSpans[this.lastHoveredPitIndex]) {
                     this.pitMapSpans[this.lastHoveredPitIndex].classList.remove('highlighted-pit');
@@ -560,7 +721,7 @@ export default class GameScene {
                     this.pitMapSpans[pitIndex].classList.add('highlighted-pit');
                 }
                 const seedCount = this.currentGameState ? this.currentGameState.board[pitIndex] : 'N/A';
-                this.hoverInfoElement.textContent = `Pit ${pitIndex} (${seedCount} seeds)`;
+                this.hoverInfoElement.textContent = `Pit ${pitIndex} · ${seedCount} seed${seedCount !== 1 ? 's' : ''}`;
                 this.lastHoveredPitIndex = pitIndex;
             }
         } else {

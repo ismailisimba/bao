@@ -137,8 +137,15 @@
             </div>
         </div>
 
-        <!-- CENTER: Open games -->
+        <!-- CENTER: Active & Open games -->
         <div class="lobby-panel">
+            <div id="active-games-container" style="display: none; margin-bottom: 24px;">
+                <h3>Your Active Games</h3>
+                <ul id="active-games-list">
+                    <!-- Populated via JS -->
+                </ul>
+            </div>
+
             <h3>Open Games <span id="lobby-refresh-indicator" style="font-size:0.7rem; color:var(--cream-dim); margin-left:6px;"></span></h3>
             <ul id="open-games-list">
                 <li class="empty-state"><div class="icon">🎮</div>Loading games...</li>
@@ -155,8 +162,22 @@
     </div>
 </div>
 
+<!-- ============================== TURN TRANSITION OVERLAY ============================== -->
+<div id="turn-transition" class="turn-transition hidden">
+    <div class="turn-transition-inner">
+        <div class="turn-transition-label" id="turn-transition-label">Turn Complete</div>
+        <div class="turn-transition-name" id="turn-transition-name"></div>
+        <div class="turn-transition-sub" id="turn-transition-sub"></div>
+        <div class="turn-transition-pip-row">
+            <div class="turn-pip"></div>
+            <div class="turn-pip"></div>
+            <div class="turn-pip"></div>
+        </div>
+    </div>
+</div>
+
 <!-- ============================== LOADING OVERLAY ============================== -->
-<div id="loading-overlay">
+<div id="loading-overlay" class="hidden">
     <div class="loading-content">
         <div class="loading-logo">BAO</div>
         <div class="loading-subtitle">The East African Board Game</div>

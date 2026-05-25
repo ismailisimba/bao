@@ -141,7 +141,7 @@ async function onAuthSuccess(t) {
         await showLobby();
         handlePendingInvite();
     } else {
-        await checkForActiveGame();
+        await showLobby();
     }
 }
 
@@ -156,13 +156,16 @@ async function showLobby() {
 
     if (pendingInviteCode) handlePendingInvite();
 
-    await Promise.all([refreshLobbyGames(), refreshResults()]);
+    await Promise.all([refreshLobbyGames(), refreshActiveGames(), refreshResults()]);
     startLobbyPoll();
 }
 
 function startLobbyPoll() {
     stopLobbyPoll();
-    lobbyPollInterval = setInterval(refreshLobbyGames, 5000);
+    lobbyPollInterval = setInterval(() => {
+        refreshLobbyGames();
+        refreshActiveGames();
+    }, 5000);
 }
 function stopLobbyPoll() {
     if (lobbyPollInterval) { clearInterval(lobbyPollInterval); lobbyPollInterval = null; }
@@ -193,6 +196,39 @@ async function refreshLobbyGames() {
         }
     } catch { /* silent */ }
     finally { if (indicator) indicator.textContent = ''; }
+}
+
+async function refreshActiveGames() {
+    try {
+        const res = await fetch('/api/games/active', { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) return;
+        const games = await res.json();
+        const container = document.getElementById('active-games-container');
+        const list = document.getElementById('active-games-list');
+        list.innerHTML = '';
+
+        if (games.length === 0) {
+            container.style.display = 'none';
+        } else {
+            container.style.display = 'block';
+            games.forEach(g => {
+                const li = document.createElement('li');
+                li.className = 'game-item';
+                // Active game logic
+                const vsText = g.vsAi ? '🤖 Computer' : `👤 ${g.opponentName}`;
+                li.innerHTML = `
+                    <span class="game-item-name">vs ${vsText}</span>
+                    <span class="game-item-badge ${g.status === 'active' ? '' : 'private'}">${g.status === 'active' ? 'In Progress' : 'Waiting'}</span>
+                `;
+                li.addEventListener('click', () => {
+                    currentGameId = g.id;
+                    joinGame(currentGameId);
+                    showGame();
+                });
+                list.appendChild(li);
+            });
+        }
+    } catch { /* silent */ }
 }
 
 async function refreshResults() {
@@ -318,6 +354,18 @@ async function showGame() {
     if (!gameSceneInstance) {
         const canvas = document.getElementById('game-canvas');
         gameSceneInstance = new GameScene(canvas, handlePitClick);
+        // Fire game-over toast exactly when the last animation + turn-transition ends
+        gameSceneInstance.onAnimationComplete = (finalState) => {
+            if (!finalState.gameOver) return;
+            const winner  = finalState.winner;
+            const myNum   = finalState.player1_id === myProfileId ? 1 : 2;
+            const winnerName = winner === 1
+                ? (finalState.player1_name || 'Player 1')
+                : (finalState.player2_name || 'Player 2');
+            const isMyWin = winner === myNum;
+            const msg = isMyWin ? `🎉 You won! Great game!` : `😔 ${winnerName} wins. Better luck next time!`;
+            showToast(msg, isMyWin ? 'success' : 'error');
+        };
         await gameSceneInstance.init();
     } else {
         // Scene already initialized, just hide overlay immediately
@@ -344,19 +392,9 @@ function handlePitClick(pitIndex) {
 function onGameStateUpdate(updateData) {
     if (!gameSceneInstance) return;
     if (updateData.moveSequence && updateData.finalState) {
+        // Animation (and any game-over toast) is handled inside GameScene
+        // via the onAnimationComplete callback set in showGame().
         gameSceneInstance.playMoveAnimation(updateData.moveSequence, updateData.finalState, myProfileId);
-        if (updateData.finalState.gameOver) {
-            const winner = updateData.finalState.winner;
-            const myNum = updateData.finalState.player1_id === myProfileId ? 1 : 2;
-            const winnerName = winner === 1
-                ? (updateData.finalState.player1_name || 'Player 1')
-                : (updateData.finalState.player2_name || 'Player 2');
-            const isMyWin = winner === myNum;
-            setTimeout(() => {
-                const msg = isMyWin ? `🎉 You won! Great game!` : `😔 ${winnerName} wins. Better luck next time!`;
-                showToast(msg, isMyWin ? 'success' : 'error');
-            }, 2500);
-        }
     } else {
         gameSceneInstance.renderGameState(updateData, myProfileId);
     }
@@ -374,23 +412,8 @@ document.getElementById('logout-btn').addEventListener('click', () => {
 });
 
 // =========================================================
-// SESSION RESTORE ON LOAD
+// INIT
 // =========================================================
-async function checkForActiveGame() {
-    try {
-        const res = await fetch('/api/games/active', { headers: { Authorization: `Bearer ${token}` } });
-        if (res.ok) {
-            const game = await res.json();
-            currentGameId = game.id;
-            joinGame(currentGameId);
-            await showGame();
-        } else {
-            await showLobby();
-        }
-    } catch {
-        await showLobby();
-    }
-}
 
 async function init() {
     // Check for invite code in URL first
@@ -427,7 +450,7 @@ async function init() {
         await showLobby();
         handlePendingInvite();
     } else {
-        await checkForActiveGame();
+        await showLobby();
     }
 }
 
