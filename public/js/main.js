@@ -382,6 +382,19 @@ document.getElementById('back-to-lobby-btn').addEventListener('click', async () 
     await showLobby();
 });
 
+document.getElementById('switch-env-btn').addEventListener('click', () => {
+    if (gameSceneInstance) {
+        const nextEnv = gameSceneInstance.cycleEnvironment();
+        const btn = document.getElementById('switch-env-btn');
+        const labels = {
+            'zanzibar': '🌍 Environment: Zanzibar Coast',
+            'serengeti': '🌍 Environment: Serengeti Plains',
+            'kilwa': '🌍 Environment: Kilwa Ruins'
+        };
+        btn.textContent = labels[nextEnv] || '🌍 Switch Environment';
+    }
+});
+
 // =========================================================
 // GAME: pit click & state update
 // =========================================================

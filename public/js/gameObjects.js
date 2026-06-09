@@ -58,6 +58,7 @@ if (object.isMesh && object.name === 'BaoBoard_WoodBoard_0') {
 console.log("Found the main interactive board mesh:", object.name);
 object.material = mainBoardMaterial;
 object.receiveShadow = true;
+object.castShadow = true;
 
 // Store this single mesh for raycasting.
 interactiveBoardMesh = object;

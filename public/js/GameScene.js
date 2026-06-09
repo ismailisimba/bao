@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import EnvironmentManager from './EnvironmentManager.js';
 import { loadGameAssets } from './gameObjects.js';
 
 export default class GameScene {
@@ -293,36 +293,10 @@ export default class GameScene {
         this.controls.minDistance = 150; this.controls.maxDistance = 1000;
         this.controls.minPolarAngle = Math.PI / 4; this.controls.maxPolarAngle = Math.PI / 2.2;
 
-        this._setLoadingProgress(10, 'Loading environment…');
+        this._setLoadingProgress(20, 'Building environment…');
 
-        const rgbeLoader = new RGBELoader();
-        const textureLoader = new THREE.TextureLoader();
-        const GCS_ASSET_URL = './assets/';
-
-        // Load HDR environment
-        await new Promise((resolve) => {
-            rgbeLoader.load(GCS_ASSET_URL + 'room_env.hdr', (t) => {
-                t.mapping = THREE.EquirectangularReflectionMapping;
-                this.scene.background = t;
-                this.scene.environment = t;
-                resolve();
-            });
-        });
-
-        this._setLoadingProgress(35, 'Loading table texture…');
-
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
-        directionalLight.position.set(-150, 200, 300); directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.width = 4096; directionalLight.shadow.mapSize.height = 4096;
-        this.scene.add(directionalLight);
-
-        const floorGeometry = new THREE.PlaneGeometry(5000, 5000);
-        const floorTexture = await textureLoader.loadAsync(GCS_ASSET_URL + 'table_texture.jpg');
-        floorTexture.wrapS = THREE.RepeatWrapping; floorTexture.wrapT = THREE.RepeatWrapping; floorTexture.repeat.set(5, 5);
-        const floorMaterial = new THREE.MeshStandardMaterial({ map: floorTexture, roughness: 0.7 });
-        const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial);
-        floorMesh.rotation.x = -Math.PI / 2; floorMesh.position.y = -50; floorMesh.receiveShadow = true;
-        this.scene.add(floorMesh);
+        this.envManager = new EnvironmentManager(this.scene, this.renderer);
+        this.envManager.setEnvironment('zanzibar'); // Default environment
 
         this._setLoadingProgress(55, 'Loading board model…');
 
@@ -350,6 +324,12 @@ export default class GameScene {
         this._setLoadingProgress(100, 'Ready!');
         await new Promise(r => setTimeout(r, 400));
         this._hideLoadingOverlay();
+    }
+
+    cycleEnvironment() {
+        if (this.envManager) {
+            return this.envManager.cycleEnvironment();
+        }
     }
 
     // --- Update the player panel with P1/P2 labels, YOU badge, and turn indicator ---
