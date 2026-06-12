@@ -86,6 +86,11 @@ seedMeshTemplate = child;
 
 if (!seedMeshTemplate) throw new Error("No mesh found in seed.glb");
 
+seedMeshTemplate.geometry.computeBoundingBox();
+const center = new THREE.Vector3();
+seedMeshTemplate.geometry.boundingBox.getCenter(center);
+seedMeshTemplate.geometry.translate(-center.x, -center.y, -center.z);
+
 seedMeshTemplate.scale.set(2, 2, 2);
 seedMeshTemplate.castShadow = true;
 

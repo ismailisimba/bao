@@ -596,7 +596,12 @@ export default class GameScene {
         const radius = Math.sqrt(Math.random()) * tightRadius;
         const seedX = pitWorldPosition.x + Math.cos(angle) * radius;
         const seedZ = pitWorldPosition.z + Math.sin(angle) * radius;
-        const seedY = pitWorldPosition.y - 18;
+        
+        // Draco compression often alters the origin/pivot point of the geometry.
+        // We reduce the downward offset (previously -18) to lift the seeds up.
+        // Tweak this value (-8) if the seeds are still too low or too high.
+        const seedY = pitWorldPosition.y - 3;
+        
         return new THREE.Vector3(seedX, seedY, seedZ);
     }
 
