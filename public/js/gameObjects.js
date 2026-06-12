@@ -1,4 +1,6 @@
-import * as THREE from 'three'; import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 // This array will no longer be populated here, as pits are not separate objects.
 // We keep it for the raycaster in scene.js, which will contain the single board mesh.
 export const interactivePits = [];
@@ -15,6 +17,11 @@ interactivePits.length = 0;
 interactiveBoardMesh = null;
 
 const loader = new GLTFLoader();
+
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath('https://unpkg.com/three@0.158.0/examples/jsm/libs/draco/');
+loader.setDRACOLoader(dracoLoader);
+
 const textureLoader = new THREE.TextureLoader();
 const GCS_ASSET_URL = './assets/';
 
